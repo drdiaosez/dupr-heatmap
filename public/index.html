@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SoCal Pickleball DUPR Heatmap</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    #map { height: 100vh; width: 100%; }
+
+    /* Loading overlay */
+    #loading {
+      position: fixed; inset: 0; background: white; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    }
+    #loading.hidden { display: none; }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid #e5e7eb;
+      border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { font-size: 14px; color: #6b7280; }
+
+    /* Filters */
+    #filters {
+      position: absolute; top: 12px; left: 12px; z-index: 1000;
+      background: white; border-radius: 12px; padding: 12px 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; max-width: 580px;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 4px; }
+    .filter-label { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+    .filter-row { display: flex; align-items: center; gap: 6px; }
+    .filter-row input[type=range] { width: 90px; accent-color: #3b82f6; cursor: pointer; }
+    .filter-val { font-size: 13px; font-weight: 600; color: #111; min-width: 34px; }
+    #total-badge { font-size: 12px; color: #6b7280; white-space: nowrap; padding-top: 14px; }
+
+    /* Search */
+    #search-wrap { position: absolute; top: 12px; right: 12px; z-index: 1001; width: 272px; }
+    #search-input {
+      width: 100%; padding: 10px 14px; border-radius: 10px; border: none;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15); font-size: 14px; outline: none; background: white;
+    }
+    #search-input::placeholder { color: #9ca3af; }
+    #autocomplete {
+      background: white; border-radius: 10px; margin-top: 4px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15); display: none; max-height: 300px; overflow-y: auto;
+    }
+    #autocomplete.show { display: block; }
+    .ac-item {
+      padding: 9px 14px; cursor: pointer; display: flex;
+      justify-content: space-between; align-items: center; gap: 8px; font-size: 13px;
+    }
+    .ac-item:hover, .ac-item.selected { background: #f0f9ff; }
+    .ac-name { color: #111; flex: 1; }
+    .ac-name em { font-style: normal; font-weight: 700; color: #2563eb; }
+    .ac-meta { font-size: 12px; color: #9ca3af; white-space: nowrap; }
+    .ac-score { font-weight: 600; font-size: 12px; padding: 1px 6px; border-radius: 20px; margin-left: 4px; }
+    .score-top  { background: #fce7f3; color: #9d174d; }
+    .score-high { background: #dcfce7; color: #166534; }
+    .score-mid  { background: #dbeafe; color: #1e40af; }
+    .score-low  { background: #f3f4f6; color: #374151; }
+
+    /* Spotlight popup */
+    .spotlight-popup .leaflet-popup-content-wrapper { border-radius: 10px; padding: 0; overflow: hidden; }
+    .spotlight-popup .leaflet-popup-content { margin: 0; }
+    .spotlight-inner { padding: 12px 16px; min-width: 180px; }
+    .spotlight-name { font-weight: 700; font-size: 14px; color: #111; }
+    .spotlight-detail { font-size: 12px; color: #6b7280; margin-top: 3px; }
+
+    /* Side panel */
+    #panel {
+      display: none; position: absolute; top: 68px; right: 12px; z-index: 1000;
+      background: white; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      width: 272px; max-height: calc(100vh - 80px); overflow: hidden; flex-direction: column;
+    }
+    #panel.open { display: flex; }
+    #panel-header {
+      padding: 12px 14px 10px; border-bottom: 1px solid #e5e7eb;
+      display: flex; justify-content: space-between; align-items: flex-start; flex-shrink: 0;
+    }
+    #panel-title { font-size: 15px; font-weight: 700; color: #111; }
+    #panel-sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    #panel-close { cursor: pointer; font-size: 18px; color: #9ca3af; background: none; border: none; padding: 0 2px; line-height: 1; }
+    #panel-close:hover { color: #374151; }
+    #panel-list { overflow-y: auto; padding: 6px 0; flex: 1; }
+    .player-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 14px; font-size: 13px; gap: 8px;
+    }
+    .player-row:hover { background: #f9fafb; }
+    .player-row.highlight { background: #eff6ff; }
+    .player-name { color: #111; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .player-age { font-size: 11px; color: #9ca3af; white-space: nowrap; }
+    .player-score { font-weight: 600; padding: 2px 7px; border-radius: 20px; font-size: 12px; white-space: nowrap; }
+    #no-results { padding: 16px; text-align: center; color: #9ca3af; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p>Loading player data…</p></div>
+<div id="map"></div>
+
+<div id="filters">
+  <div class="filter-group">
+    <div class="filter-label">Min DUPR</div>
+    <div class="filter-row"><input type="range" id="dupr-min" min="4.0" max="7.0" step="0.25" value="4.0"><span class="filter-val" id="dupr-min-val">4.00</span></div>
+  </div>
+  <div class="filter-group">
+    <div class="filter-label">Max DUPR</div>
+    <div class="filter-row"><input type="range" id="dupr-max" min="4.0" max="7.0" step="0.25" value="7.0"><span class="filter-val" id="dupr-max-val">7.00</span></div>
+  </div>
+  <div class="filter-group">
+    <div class="filter-label">Min Age</div>
+    <div class="filter-row"><input type="range" id="age-min" min="1" max="80" step="1" value="1"><span class="filter-val" id="age-min-val">1</span></div>
+  </div>
+  <div class="filter-group">
+    <div class="filter-label">Max Age</div>
+    <div class="filter-row"><input type="range" id="age-max" min="1" max="80" step="1" value="80"><span class="filter-val" id="age-max-val">80</span></div>
+  </div>
+  <div id="total-badge">Loading…</div>
+</div>
+
+<div id="search-wrap">
+  <input type="text" id="search-input" placeholder="🔍  Search player by name…" autocomplete="off">
+  <div id="autocomplete"></div>
+</div>
+
+<div id="panel">
+  <div id="panel-header">
+    <div><div id="panel-title"></div><div id="panel-sub"></div></div>
+    <button id="panel-close" onclick="closePanel()">✕</button>
+  </div>
+  <div id="panel-list"></div>
+</div>
+
+<script>
+let allCities = [], allPlayers = [];
+let heatLayer = null, markers = [], activeCityData = null, spotlightMarker = null, acIndex = -1;
+
+const map = L.map('map').setView([33.8, -117.9], 9);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 14
+}).addTo(map);
+
+// Load data
+Promise.all([
+  fetch('data/city_data.json').then(r => r.json()),
+  fetch('data/all_players.json').then(r => r.json()),
+]).then(([cities, players]) => {
+  allCities  = cities;
+  allPlayers = players;
+
+  // Set slider bounds from actual data
+  const scores = allPlayers.map(p => p.score).filter(Boolean);
+  const ages   = allPlayers.map(p => p.age).filter(Boolean);
+  const minS = Math.floor(Math.min(...scores) * 4) / 4;
+  const maxS = Math.ceil(Math.max(...scores)  * 4) / 4;
+  const minA = Math.min(...ages);
+  const maxA = Math.max(...ages);
+
+  ['dupr-min','dupr-max'].forEach(id => {
+    const el = document.getElementById(id);
+    el.min = minS; el.max = maxS;
+  });
+  document.getElementById('dupr-min').value = minS;
+  document.getElementById('dupr-max').value = maxS;
+  ['age-min','age-max'].forEach(id => {
+    const el = document.getElementById(id);
+    el.min = minA; el.max = maxA;
+  });
+  document.getElementById('age-min').value = minA;
+  document.getElementById('age-max').value = maxA;
+
+  document.getElementById('loading').classList.add('hidden');
+  refresh();
+}).catch(err => {
+  document.getElementById('loading').innerHTML =
+    '<p style="color:#ef4444">Failed to load data: ' + err.message + '</p>';
+});
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function scoreCls(s) { return s >= 5.5 ? 'score-top' : s >= 5.0 ? 'score-high' : s >= 4.75 ? 'score-mid' : 'score-low'; }
+
+function getFilters() {
+  return {
+    duprMin: parseFloat(document.getElementById('dupr-min').value),
+    duprMax: parseFloat(document.getElementById('dupr-max').value),
+    ageMin:  parseInt(document.getElementById('age-min').value),
+    ageMax:  parseInt(document.getElementById('age-max').value),
+  };
+}
+
+function filterPlayers(players, f) {
+  return players.filter(([, score, age]) => {
+    if (score === null || score < f.duprMin || score > f.duprMax) return false;
+    if (age !== null && (age < f.ageMin || age > f.ageMax)) return false;
+    return true;
+  });
+}
+
+// ── Panel ──────────────────────────────────────────────────────────────
+function closePanel() { document.getElementById('panel').classList.remove('open'); activeCityData = null; }
+
+function openPanel(cityData, filtered, highlightName) {
+  activeCityData = cityData;
+  document.getElementById('panel-title').textContent = cityData.city;
+  renderPanel(filtered, highlightName);
+  document.getElementById('panel').classList.add('open');
+}
+
+function renderPanel(filtered, highlightName) {
+  document.getElementById('panel-sub').textContent =
+    filtered.length + ' player' + (filtered.length !== 1 ? 's' : '') + ' · sorted by DUPR';
+  const list = document.getElementById('panel-list');
+  if (!filtered.length) { list.innerHTML = '<div id="no-results">No players match filters</div>'; return; }
+  list.innerHTML = filtered.map(([name, score, age]) => {
+    const cls = scoreCls(score);
+    const hl  = highlightName && name === highlightName ? ' highlight' : '';
+    const ageStr = age !== null ? '<span class="player-age">' + age + '</span>' : '';
+    return '<div class="player-row' + hl + '"><span class="player-name">' + name + '</span>' +
+      ageStr + '<span class="player-score ' + cls + '">' + score.toFixed(3) + '</span></div>';
+  }).join('');
+  if (highlightName) {
+    const hlEl = list.querySelector('.highlight');
+    if (hlEl) setTimeout(() => hlEl.scrollIntoView({ block: 'center' }), 50);
+  }
+}
+
+// ── Spotlight ──────────────────────────────────────────────────────────
+function spotlightPlayer(player) {
+  if (spotlightMarker) { map.removeLayer(spotlightMarker); spotlightMarker = null; }
+  const city = allCities.find(c => c.city === player.city); if (!city) return;
+  map.flyTo([city.lat, city.lng], 12, { duration: 1.0 });
+  spotlightMarker = L.circleMarker([city.lat, city.lng], {
+    radius: 14, color: '#f59e0b', weight: 3, fillColor: '#fcd34d', fillOpacity: 0.9
+  }).addTo(map);
+  const ageStr = player.age !== null ? ' · Age ' + player.age : '';
+  spotlightMarker.bindPopup(
+    '<div class="spotlight-inner"><div class="spotlight-name">' + player.name + '</div>' +
+    '<div class="spotlight-detail">' + player.city + ageStr + '</div>' +
+    '<div style="margin-top:6px"><span class="player-score ac-score ' + scoreCls(player.score) + '">' +
+    player.score.toFixed(3) + ' DUPR</span></div></div>',
+    { className: 'spotlight-popup' }
+  ).openPopup();
+  const f = getFilters();
+  const filtered = filterPlayers(city.players, f);
+  openPanel(city, filtered.length ? filtered : city.players, player.name);
+}
+
+// ── Autocomplete ───────────────────────────────────────────────────────
+const searchInput = document.getElementById('search-input');
+const acBox = document.getElementById('autocomplete');
+
+function hlText(text, q) {
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i === -1) return text;
+  return text.slice(0, i) + '<em>' + text.slice(i, i + q.length) + '</em>' + text.slice(i + q.length);
+}
+
+function renderAC(matches, q) {
+  acIndex = -1;
+  if (!matches.length) { acBox.classList.remove('show'); return; }
+  acBox.innerHTML = matches.slice(0, 10).map((p, i) =>
+    '<div class="ac-item" data-i="' + i + '"><span class="ac-name">' + hlText(p.name, q) + '</span>' +
+    '<span class="ac-meta">' + p.city + '</span>' +
+    '<span class="ac-score ' + scoreCls(p.score) + '">' + p.score.toFixed(3) + '</span></div>'
+  ).join('');
+  acBox.classList.add('show');
+  acBox._matches = matches;
+  acBox.querySelectorAll('.ac-item').forEach(el =>
+    el.addEventListener('mousedown', e => { e.preventDefault(); selectPlayer(matches[parseInt(el.dataset.i)]); })
+  );
+}
+
+function selectPlayer(p) { searchInput.value = p.name; acBox.classList.remove('show'); spotlightPlayer(p); }
+
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim();
+  if (!q) { acBox.classList.remove('show'); return; }
+  renderAC(allPlayers.filter(p => p.name.toLowerCase().includes(q.toLowerCase())), q);
+});
+
+searchInput.addEventListener('keydown', e => {
+  const items = acBox.querySelectorAll('.ac-item');
+  if (e.key === 'ArrowDown') { e.preventDefault(); acIndex = Math.min(acIndex + 1, items.length - 1); items.forEach((el, i) => el.classList.toggle('selected', i === acIndex)); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); acIndex = Math.max(acIndex - 1, -1); items.forEach((el, i) => el.classList.toggle('selected', i === acIndex)); }
+  else if (e.key === 'Enter') { if (acIndex >= 0 && acBox._matches) selectPlayer(acBox._matches[acIndex]); else if (acBox._matches?.length) selectPlayer(acBox._matches[0]); }
+  else if (e.key === 'Escape') { acBox.classList.remove('show'); searchInput.value = ''; if (spotlightMarker) { map.removeLayer(spotlightMarker); spotlightMarker = null; } }
+});
+document.addEventListener('click', e => { if (!document.getElementById('search-wrap').contains(e.target)) acBox.classList.remove('show'); });
+
+// ── Map refresh ────────────────────────────────────────────────────────
+function refresh() {
+  const f = getFilters();
+  document.getElementById('dupr-min-val').textContent = f.duprMin.toFixed(2);
+  document.getElementById('dupr-max-val').textContent = f.duprMax.toFixed(2);
+  document.getElementById('age-min-val').textContent  = f.ageMin;
+  document.getElementById('age-max-val').textContent  = f.ageMax;
+
+  markers.forEach(m => map.removeLayer(m)); markers = [];
+  if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+
+  const heatPoints = []; let total = 0;
+  allCities.forEach(c => {
+    const filtered = filterPlayers(c.players, f);
+    if (!filtered.length) return;
+    total += filtered.length;
+    heatPoints.push([c.lat, c.lng, filtered.length]);
+    const r = filtered.length >= 100 ? 16 : filtered.length >= 50 ? 13 : filtered.length >= 20 ? 10 : filtered.length >= 8 ? 7 : filtered.length >= 3 ? 5 : 3;
+    const m = L.circleMarker([c.lat, c.lng], {
+      radius: r, color: '#1e3a5f', weight: 1.2, fillColor: '#3b82f6', fillOpacity: 0.75
+    })
+    .bindTooltip(c.city + ' (' + filtered.length + ')', { direction: 'top', offset: [0, -4] })
+    .on('click', () => openPanel(c, filterPlayers(c.players, getFilters())));
+    m.addTo(map); markers.push(m);
+  });
+
+  heatLayer = L.heatLayer(heatPoints, {
+    radius: 32, blur: 22, maxZoom: 13,
+    max: Math.max(...heatPoints.map(p => p[2]), 1),
+    gradient: { 0.1: 'blue', 0.3: 'cyan', 0.5: 'lime', 0.7: 'yellow', 1.0: 'red' }
+  }).addTo(map);
+
+  document.getElementById('total-badge').textContent = total + ' player' + (total !== 1 ? 's' : '');
+  if (activeCityData && document.getElementById('panel').classList.contains('open'))
+    renderPanel(filterPlayers(activeCityData.players, f));
+}
+
+['dupr-min', 'dupr-max', 'age-min', 'age-max'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    const dmn = parseFloat(document.getElementById('dupr-min').value);
+    const dmx = parseFloat(document.getElementById('dupr-max').value);
+    const amn = parseInt(document.getElementById('age-min').value);
+    const amx = parseInt(document.getElementById('age-max').value);
+    if (dmn > dmx) { id === 'dupr-min' ? document.getElementById('dupr-max').value = dmn : document.getElementById('dupr-min').value = dmx; }
+    if (amn > amx) { id === 'age-min'  ? document.getElementById('age-max').value  = amn : document.getElementById('age-min').value  = amx; }
+    refresh();
+  });
+});
+</script>
+</body>
+</html>
