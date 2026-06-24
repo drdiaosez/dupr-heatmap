@@ -6,8 +6,8 @@
 
 set -e
 
-DROPLET_IP="YOUR_DROPLET_IP"       # e.g. 143.198.123.45
-DROPLET_USER="root"                 # or your sudo user
+DROPLET_IP="67.205.139.219"
+DROPLET_USER="bot"
 REMOTE_PATH="/var/www/dupr-heatmap"
 LOCAL_PATH="$(cd "$(dirname "$0")/.." && pwd)/public"
 
