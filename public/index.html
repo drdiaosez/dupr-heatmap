@@ -123,6 +123,16 @@
     <div class="filter-row"><input type="range" id="age-max" min="1" max="80" step="1" value="80"><span class="filter-val" id="age-max-val">80</span></div>
   </div>
   <div id="total-badge">Loading…</div>
+  <div id="color-legend" style="display:flex;align-items:center;gap:6px;padding-top:14px;font-size:11px;color:#6b7280;">
+    <span>Avg DUPR:</span>
+    <span style="display:flex;align-items:center;gap:3px;">
+      <span style="width:12px;height:12px;border-radius:50%;background:#3b82f6;display:inline-block"></span>4.0
+      <span style="width:12px;height:12px;border-radius:50%;background:#06b6d4;display:inline-block;margin-left:4px"></span>4.5
+      <span style="width:12px;height:12px;border-radius:50%;background:#22c55e;display:inline-block;margin-left:4px"></span>5.0
+      <span style="width:12px;height:12px;border-radius:50%;background:#eab308;display:inline-block;margin-left:4px"></span>5.5
+      <span style="width:12px;height:12px;border-radius:50%;background:#ef4444;display:inline-block;margin-left:4px"></span>6.0+
+    </span>
+  </div>
 </div>
 
 <div id="search-wrap">
@@ -306,16 +316,69 @@ function refresh() {
   if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
 
   const heatPoints = []; let total = 0;
+
+  // Score buckets → colors (center = highest rated)
+  const SCORE_BANDS = [
+    { min: 6.0,  max: Infinity, color: '#ef4444' },  // red
+    { min: 5.5,  max: 6.0,      color: '#eab308' },  // yellow
+    { min: 5.0,  max: 5.5,      color: '#22c55e' },  // green
+    { min: 4.5,  max: 5.0,      color: '#06b6d4' },  // cyan
+    { min: -Infinity, max: 4.5, color: '#3b82f6' },  // blue
+  ];
+
+  // Build concentric SVG circles: highest-rated band is innermost
+  function makePieIcon(filtered, pixelR) {
+    const n = filtered.length;
+    const size = pixelR * 2 + 4;
+    const cx = size / 2, cy = size / 2;
+
+    // Count players per band
+    const bands = SCORE_BANDS.map(b => ({
+      ...b,
+      count: filtered.filter(p => p[1] >= b.min && p[1] < b.max).length
+    })).filter(b => b.count > 0);
+
+    if (bands.length === 1) {
+      // All one color — plain circle
+      const svg = `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="${cx}" cy="${cy}" r="${pixelR}" fill="${bands[0].color}" stroke="#1e3a5f" stroke-width="1.2" opacity="0.9"/>
+      </svg>`;
+      return L.divIcon({ html: svg, className: '', iconSize: [size, size], iconAnchor: [cx, cy] });
+    }
+
+    // Concentric rings: outermost = all players, progressively inward for higher bands
+    // Each ring's radius is proportional to sqrt of cumulative fraction (area-based)
+    // Sort bands so highest DUPR is drawn last (on top / innermost)
+    const sorted = [...bands].reverse(); // low→high, so high is drawn last
+    let circles = '';
+
+    // Outer ring first (full circle, lowest color bucket that has players)
+    // We draw from outside in, so each subsequent circle covers the previous
+    let cumulative = n;
+    for (const band of sorted) {
+      const frac = cumulative / n;
+      const r = pixelR * Math.sqrt(frac);
+      circles += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${band.color}" opacity="0.9"/>`;
+      cumulative -= band.count;
+    }
+
+    const svg = `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+      ${circles}
+      <circle cx="${cx}" cy="${cy}" r="${pixelR}" fill="none" stroke="#1e3a5f" stroke-width="1.2"/>
+    </svg>`;
+    return L.divIcon({ html: svg, className: '', iconSize: [size, size], iconAnchor: [cx, cy] });
+  }
+
   allCities.forEach(c => {
     const filtered = filterPlayers(c.players, f);
     if (!filtered.length) return;
     total += filtered.length;
     heatPoints.push([c.lat, c.lng, filtered.length]);
-    const r = filtered.length >= 100 ? 16 : filtered.length >= 50 ? 13 : filtered.length >= 20 ? 10 : filtered.length >= 8 ? 7 : filtered.length >= 3 ? 5 : 3;
-    const m = L.circleMarker([c.lat, c.lng], {
-      radius: r, color: '#1e3a5f', weight: 1.2, fillColor: '#3b82f6', fillOpacity: 0.75
-    })
-    .bindTooltip(c.city + ' (' + filtered.length + ')', { direction: 'top', offset: [0, -4] })
+    const pixelR = filtered.length >= 100 ? 16 : filtered.length >= 50 ? 13 : filtered.length >= 20 ? 10 : filtered.length >= 8 ? 7 : filtered.length >= 3 ? 5 : 3;
+    const avg = filtered.reduce((sum, p) => sum + p[1], 0) / filtered.length;
+    const icon = makePieIcon(filtered, pixelR);
+    const m = L.marker([c.lat, c.lng], { icon })
+    .bindTooltip(c.city + ' (' + filtered.length + ') · avg ' + avg.toFixed(2), { direction: 'top', offset: [0, -4] })
     .on('click', () => { if (spotlightMarker) { map.removeLayer(spotlightMarker); spotlightMarker = null; } searchInput.value = ''; acBox.classList.remove('show'); openPanel(c, filterPlayers(c.players, getFilters())); });
     m.addTo(map); markers.push(m);
   });
