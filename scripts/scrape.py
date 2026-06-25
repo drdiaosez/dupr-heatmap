@@ -137,7 +137,35 @@ def scrape_html(html_path: str) -> pd.DataFrame:
     return df
 
 
+# ── Manually added players (won't appear in scrape results) ──────────────
+MANUAL_PLAYERS = [
+    {"name": "Evan Su", "score": 4.173, "age": 37, "city": "Torrance"},
+]
+
+
 def build_outputs(df: pd.DataFrame):
+    # all_players includes everyone (even those with no city) so search works
+    all_players = []
+    existing_names = set()
+    for _, row in df.iterrows():
+        if pd.notna(row["score"]):
+            all_players.append({
+                "name":  row["name"],
+                "score": round(float(row["score"]), 3),
+                "age":   int(row["age"]) if pd.notna(row["age"]) else None,
+                "city":  row["city"],
+            })
+            existing_names.add(row["name"].lower())
+
+    # Inject manual players if not already in the data
+    for p in MANUAL_PLAYERS:
+        if p["name"].lower() not in existing_names:
+            all_players.append(p)
+            print(f"  + Added manual player: {p['name']}")
+
+    all_players.sort(key=lambda x: x["name"].lower())
+
+    # city_data only includes players with a known city + coordinates
     df = df[df["city"] != "Unknown"].copy()
 
     # city_data.json — grouped by city with coords
@@ -156,22 +184,19 @@ def build_outputs(df: pd.DataFrame):
         for c in sorted(missing):
             print(f"  {c} ({len(city_players[c])} players) — add to COORDS in scrape.py")
 
+    # Inject manual players into city_players before building city_data
+    for p in MANUAL_PLAYERS:
+        if p["name"].lower() not in existing_names and p["city"] in COORDS:
+            city_players.setdefault(p["city"], [])
+            if not any(pl[0].lower() == p["name"].lower() for pl in city_players[p["city"]]):
+                city_players[p["city"]].append([p["name"], p["score"], p["age"]])
+                city_players[p["city"]].sort(key=lambda x: -x[1])
+
     city_data = []
     for city, players in city_players.items():
         if city in COORDS:
             lat, lng = COORDS[city]
             city_data.append({"city": city, "lat": lat, "lng": lng, "players": players})
-
-    # all_players.json — flat list for search autocomplete
-    all_players = []
-    for _, row in df.iterrows():
-        all_players.append({
-            "name":  row["name"],
-            "score": round(float(row["score"]), 3) if pd.notna(row["score"]) else None,
-            "age":   int(row["age"]) if pd.notna(row["age"]) else None,
-            "city":  row["city"],
-        })
-    all_players.sort(key=lambda x: x["name"].lower())
 
     # Write outputs
     city_data_path   = DATA_DIR / "city_data.json"

@@ -118,6 +118,23 @@ REMOTE_PATH="/var/www/dupr-heatmap"
 
 ---
 
+## Manually adding players
+
+Some players don't appear in DUPR scrape results (e.g. your own account). Add them
+to the `MANUAL_PLAYERS` list at the top of `scripts/scrape.py`:
+
+```python
+MANUAL_PLAYERS = [
+    {"name": "Evan Su", "score": 4.173, "age": 37, "city": "Torrance"},
+    {"name": "Another Player", "score": 4.5, "age": 25, "city": "Irvine"},
+]
+```
+
+These are injected automatically every time `scrape.py` runs. If a player from
+`MANUAL_PLAYERS` ever shows up in the scraped data, they won't be duplicated.
+
+---
+
 ## Adding new cities
 
 If the scraper warns about missing coordinates, add them to the `COORDS` dict in `scripts/scrape.py`:
