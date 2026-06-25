@@ -1,0 +1,1094 @@
+{
+  "Acton": {
+    "lat": 34.4807415,
+    "lng": -118.1868379
+  },
+  "Agoura Hills": {
+    "lat": 34.1364,
+    "lng": -118.7617
+  },
+  "Agua Dulce": {
+    "lat": 34.4963817,
+    "lng": -118.3256348
+  },
+  "Aguanga": {
+    "lat": 33.4555951,
+    "lng": -116.8594435
+  },
+  "Alhambra": {
+    "lat": 34.0953,
+    "lng": -118.127
+  },
+  "Aliso Viejo": {
+    "lat": 33.5676,
+    "lng": -117.7267
+  },
+  "Altadena": {
+    "lat": 34.19,
+    "lng": -118.1314
+  },
+  "Anaheim": {
+    "lat": 33.8353,
+    "lng": -117.9145
+  },
+  "Apple Valley": {
+    "lat": 34.5008311,
+    "lng": -117.1858759
+  },
+  "Arcadia": {
+    "lat": 34.1397,
+    "lng": -118.0353
+  },
+  "Artesia": {
+    "lat": 33.8690197,
+    "lng": -118.0796195
+  },
+  "Avalon": {
+    "lat": 33.34221,
+    "lng": -118.3272612
+  },
+  "Azusa": {
+    "lat": 34.1336,
+    "lng": -117.9075
+  },
+  "Baldwin Park": {
+    "lat": 34.0853,
+    "lng": -117.9606
+  },
+  "Beaumont": {
+    "lat": 33.9294,
+    "lng": -116.9772
+  },
+  "Bell": {
+    "lat": 33.977,
+    "lng": -118.1867
+  },
+  "Bell Canyon": {
+    "lat": 34.1997,
+    "lng": -118.7289
+  },
+  "Bell Gardens": {
+    "lat": 33.9653,
+    "lng": -118.1514
+  },
+  "Bellflower": {
+    "lat": 33.8817,
+    "lng": -118.117
+  },
+  "Bermuda Dunes": {
+    "lat": 33.7436,
+    "lng": -116.2928
+  },
+  "Beverly Hills": {
+    "lat": 34.0736,
+    "lng": -118.4004
+  },
+  "Bloomington": {
+    "lat": 34.0592342,
+    "lng": -117.4029681
+  },
+  "Bonita": {
+    "lat": 32.6628,
+    "lng": -117.0317
+  },
+  "Bonsall": {
+    "lat": 33.2762571,
+    "lng": -117.1996398
+  },
+  "Bradbury": {
+    "lat": 34.1469511,
+    "lng": -117.970898
+  },
+  "Brea": {
+    "lat": 33.9167,
+    "lng": -117.9006
+  },
+  "Buena Park": {
+    "lat": 33.8669,
+    "lng": -117.9981
+  },
+  "Burbank": {
+    "lat": 34.1808,
+    "lng": -118.3089
+  },
+  "CA": {
+    "lat": 34.2727885,
+    "lng": -119.2609533
+  },
+  "Calabasas": {
+    "lat": 34.1513,
+    "lng": -118.6601
+  },
+  "California City": {
+    "lat": 35.1259261,
+    "lng": -117.959868
+  },
+  "Calimesa": {
+    "lat": 34.0,
+    "lng": -117.0642
+  },
+  "Camarillo": {
+    "lat": 34.2158,
+    "lng": -119.0375
+  },
+  "Canyon Lake": {
+    "lat": 33.6847,
+    "lng": -117.2703
+  },
+  "Carlsbad": {
+    "lat": 33.1581,
+    "lng": -117.3506
+  },
+  "Carpinteria": {
+    "lat": 34.3994,
+    "lng": -119.5083
+  },
+  "Carson": {
+    "lat": 33.8317,
+    "lng": -118.282
+  },
+  "Casa de Oro-Mount Helix": {
+    "lat": 32.7653,
+    "lng": -116.9547
+  },
+  "Castaic": {
+    "lat": 34.478169,
+    "lng": -118.6361914
+  },
+  "Cathedral City": {
+    "lat": 33.7797,
+    "lng": -116.4653
+  },
+  "Cerritos": {
+    "lat": 33.8583,
+    "lng": -118.0647
+  },
+  "Cherry Valley": {
+    "lat": 33.9742,
+    "lng": -116.9775
+  },
+  "Chino": {
+    "lat": 34.0122,
+    "lng": -117.6889
+  },
+  "Chino Hills": {
+    "lat": 33.9908,
+    "lng": -117.7228
+  },
+  "Chula Vista": {
+    "lat": 32.6401,
+    "lng": -117.0842
+  },
+  "City of Industry": {
+    "lat": 34.0182252,
+    "lng": -117.9593061
+  },
+  "Claremont": {
+    "lat": 34.0997,
+    "lng": -117.7198
+  },
+  "Coachella": {
+    "lat": 33.6794956,
+    "lng": -116.17628
+  },
+  "Colton": {
+    "lat": 34.0669162,
+    "lng": -117.3242785
+  },
+  "Commerce": {
+    "lat": 34.003218,
+    "lng": -118.1541961
+  },
+  "Compton": {
+    "lat": 33.8958,
+    "lng": -118.2201
+  },
+  "Corona": {
+    "lat": 33.8753,
+    "lng": -117.5664
+  },
+  "Coronado": {
+    "lat": 32.6859,
+    "lng": -117.1831
+  },
+  "Costa Mesa": {
+    "lat": 33.6645,
+    "lng": -117.9059
+  },
+  "Coto de Caza": {
+    "lat": 33.5964,
+    "lng": -117.5892
+  },
+  "Covina": {
+    "lat": 34.09,
+    "lng": -117.8883
+  },
+  "Culver City": {
+    "lat": 34.0211,
+    "lng": -118.3964
+  },
+  "Cypress": {
+    "lat": 33.8169,
+    "lng": -118.0375
+  },
+  "Dana Point": {
+    "lat": 33.4697,
+    "lng": -117.6981
+  },
+  "Del Mar": {
+    "lat": 32.9595,
+    "lng": -117.2714
+  },
+  "Desert Hot Springs": {
+    "lat": 33.961124,
+    "lng": -116.5016784
+  },
+  "Diamond Bar": {
+    "lat": 33.9994,
+    "lng": -117.81
+  },
+  "Downey": {
+    "lat": 33.9401,
+    "lng": -118.1331
+  },
+  "Duarte": {
+    "lat": 34.1394513,
+    "lng": -117.9772873
+  },
+  "East Los Angeles": {
+    "lat": 34.0239015,
+    "lng": -118.172015
+  },
+  "East Pasadena": {
+    "lat": 34.1383715,
+    "lng": -118.0743616
+  },
+  "Eastvale": {
+    "lat": 33.9628,
+    "lng": -117.583
+  },
+  "El Cajon": {
+    "lat": 32.7948,
+    "lng": -116.9625
+  },
+  "El Camino Village": {
+    "lat": 33.8894595,
+    "lng": -118.3309073
+  },
+  "El Monte": {
+    "lat": 34.0686,
+    "lng": -118.0275
+  },
+  "El Segundo": {
+    "lat": 33.9192,
+    "lng": -118.4165
+  },
+  "El Sobrante": {
+    "lat": 37.9744635,
+    "lng": -122.3057294
+  },
+  "Encinitas": {
+    "lat": 33.0369,
+    "lng": -117.292
+  },
+  "Escondido": {
+    "lat": 33.1192,
+    "lng": -116.9739
+  },
+  "Fallbrook": {
+    "lat": 33.3736,
+    "lng": -117.152
+  },
+  "Fillmore": {
+    "lat": 34.3985613,
+    "lng": -118.9125093
+  },
+  "Florence-Graham": {
+    "lat": 33.9658741,
+    "lng": -118.2432988
+  },
+  "Fontana": {
+    "lat": 34.0922,
+    "lng": -117.435
+  },
+  "Fountain Valley": {
+    "lat": 33.7092,
+    "lng": -117.9536
+  },
+  "French Valley": {
+    "lat": 33.5928,
+    "lng": -117.0819
+  },
+  "Fullerton": {
+    "lat": 33.8703,
+    "lng": -117.9242
+  },
+  "Garden Grove": {
+    "lat": 33.7783,
+    "lng": -117.9311
+  },
+  "Gardena": {
+    "lat": 33.8883,
+    "lng": -118.3089
+  },
+  "Glendale": {
+    "lat": 34.1425,
+    "lng": -118.2551
+  },
+  "Glendora": {
+    "lat": 34.1361,
+    "lng": -117.8653
+  },
+  "Grand Terrace": {
+    "lat": 34.0339107,
+    "lng": -117.3138355
+  },
+  "HUNTINGTN BCH": {
+    "lat": 33.6603,
+    "lng": -117.9992
+  },
+  "Hacienda Heights": {
+    "lat": 33.9933,
+    "lng": -117.9692
+  },
+  "Hawaiian Gardens": {
+    "lat": 33.8284787,
+    "lng": -118.074313
+  },
+  "Hawthorne": {
+    "lat": 33.9164,
+    "lng": -118.3526
+  },
+  "Helendale": {
+    "lat": 34.7397,
+    "lng": -117.3339
+  },
+  "Hemet": {
+    "lat": 33.7475,
+    "lng": -116.9719
+  },
+  "Hermosa Beach": {
+    "lat": 33.8622,
+    "lng": -118.3995
+  },
+  "Hesperia": {
+    "lat": 34.4264,
+    "lng": -117.3009
+  },
+  "Hidden Hills": {
+    "lat": 34.1611,
+    "lng": -118.6603
+  },
+  "Highland": {
+    "lat": 34.11213,
+    "lng": -117.1807973
+  },
+  "Huntington Beach": {
+    "lat": 33.6603,
+    "lng": -117.9992
+  },
+  "Huntington Park": {
+    "lat": 33.9805731,
+    "lng": -118.2252073
+  },
+  "Idyllwild-Pine Cove": {
+    "lat": 33.7435635,
+    "lng": -116.7237619
+  },
+  "Imperial Beach": {
+    "lat": 32.583893,
+    "lng": -117.1130487
+  },
+  "Indian Wells": {
+    "lat": 33.7217965,
+    "lng": -116.338303
+  },
+  "Indio": {
+    "lat": 33.7206,
+    "lng": -116.2156
+  },
+  "Inglewood": {
+    "lat": 33.9617,
+    "lng": -118.3531
+  },
+  "Irvine": {
+    "lat": 33.6846,
+    "lng": -117.8265
+  },
+  "Irwindale": {
+    "lat": 34.1069927,
+    "lng": -117.934214
+  },
+  "Jurupa Valley": {
+    "lat": 33.9972,
+    "lng": -117.4855
+  },
+  "La Ca\u00f1ada Flintridge": {
+    "lat": 34.1997,
+    "lng": -118.2003
+  },
+  "La Crescenta-Montrose": {
+    "lat": 34.2319,
+    "lng": -118.2356
+  },
+  "La Habra": {
+    "lat": 33.9319,
+    "lng": -117.9461
+  },
+  "La Habra Heights": {
+    "lat": 33.9604546,
+    "lng": -117.9504255
+  },
+  "La Mesa": {
+    "lat": 32.7678,
+    "lng": -117.0228
+  },
+  "La Mirada": {
+    "lat": 33.9172,
+    "lng": -118.012
+  },
+  "La Palma": {
+    "lat": 33.8464,
+    "lng": -118.0467
+  },
+  "La Puente": {
+    "lat": 34.0280619,
+    "lng": -117.953097
+  },
+  "La Quinta": {
+    "lat": 33.6633,
+    "lng": -116.31
+  },
+  "La Verne": {
+    "lat": 34.1008,
+    "lng": -117.7681
+  },
+  "Ladera Heights": {
+    "lat": 33.9961043,
+    "lng": -118.3752213
+  },
+  "Ladera Ranch": {
+    "lat": 33.5592,
+    "lng": -117.6328
+  },
+  "Laguna Beach": {
+    "lat": 33.5422,
+    "lng": -117.7831
+  },
+  "Laguna Hills": {
+    "lat": 33.6028,
+    "lng": -117.6931
+  },
+  "Laguna Niguel": {
+    "lat": 33.5225,
+    "lng": -117.705
+  },
+  "Laguna Woods": {
+    "lat": 33.6097,
+    "lng": -117.7253
+  },
+  "Lake Elsinore": {
+    "lat": 33.6681,
+    "lng": -117.3273
+  },
+  "Lake Forest": {
+    "lat": 33.6469,
+    "lng": -117.6892
+  },
+  "Lakeside": {
+    "lat": 32.8578,
+    "lng": -116.9225
+  },
+  "Lakewood": {
+    "lat": 33.8536,
+    "lng": -118.1339
+  },
+  "Lancaster": {
+    "lat": 34.6868,
+    "lng": -118.1542
+  },
+  "Las Flores": {
+    "lat": 33.5841,
+    "lng": -117.6230129
+  },
+  "Lawndale": {
+    "lat": 33.8951219,
+    "lng": -118.3526323
+  },
+  "Loma Linda": {
+    "lat": 34.0483,
+    "lng": -117.2736
+  },
+  "Lomita": {
+    "lat": 33.8036545,
+    "lng": -118.3195014
+  },
+  "Long Beach": {
+    "lat": 33.7701,
+    "lng": -118.1937
+  },
+  "Los Alamitos": {
+    "lat": 33.8038865,
+    "lng": -118.0772433
+  },
+  "Los Angeles": {
+    "lat": 34.0522,
+    "lng": -118.2437
+  },
+  "Los Angeles County": {
+    "lat": 34.0522,
+    "lng": -118.2437
+  },
+  "Lynwood": {
+    "lat": 33.9303,
+    "lng": -118.2117
+  },
+  "MONARCH BAY": {
+    "lat": 33.4886315,
+    "lng": -117.7302571
+  },
+  "Malibu": {
+    "lat": 34.0259,
+    "lng": -118.7798
+  },
+  "Manhattan Beach": {
+    "lat": 33.8847,
+    "lng": -118.4109
+  },
+  "Marina del Rey": {
+    "lat": 33.9806,
+    "lng": -118.4517
+  },
+  "Menifee": {
+    "lat": 33.6908,
+    "lng": -117.1611
+  },
+  "Midway City": {
+    "lat": 33.7457982,
+    "lng": -117.9834996
+  },
+  "Mission Viejo": {
+    "lat": 33.6217,
+    "lng": -117.6711
+  },
+  "Monrovia": {
+    "lat": 34.1442,
+    "lng": -117.9981
+  },
+  "Montclair": {
+    "lat": 34.0775,
+    "lng": -117.6897
+  },
+  "Montebello": {
+    "lat": 34.0153,
+    "lng": -118.1134
+  },
+  "Montecito": {
+    "lat": 34.4361,
+    "lng": -119.6353
+  },
+  "Monterey Park": {
+    "lat": 34.0633,
+    "lng": -118.1228
+  },
+  "Moorpark": {
+    "lat": 34.2858,
+    "lng": -118.8814
+  },
+  "Moreno Valley": {
+    "lat": 33.9425,
+    "lng": -117.2297
+  },
+  "Murrieta": {
+    "lat": 33.5539,
+    "lng": -117.2139
+  },
+  "NO PALM SPRINGS": {
+    "lat": 33.8246269,
+    "lng": -116.540303
+  },
+  "National City": {
+    "lat": 32.6781,
+    "lng": -117.0992
+  },
+  "Newport Beach": {
+    "lat": 33.6189,
+    "lng": -117.9289
+  },
+  "Norco": {
+    "lat": 33.9311,
+    "lng": -117.5489
+  },
+  "North Tustin": {
+    "lat": 33.7614,
+    "lng": -117.7942
+  },
+  "Norwalk": {
+    "lat": 33.9022,
+    "lng": -118.0814
+  },
+  "Nuevo": {
+    "lat": 33.8017,
+    "lng": -117.1497
+  },
+  "Oak Park": {
+    "lat": 34.1811,
+    "lng": -118.7617
+  },
+  "Oceanside": {
+    "lat": 33.1959,
+    "lng": -117.3795
+  },
+  "Ojai": {
+    "lat": 34.4481,
+    "lng": -119.2428
+  },
+  "Ontario": {
+    "lat": 34.0633,
+    "lng": -117.6509
+  },
+  "Orange": {
+    "lat": 33.7879,
+    "lng": -117.8531
+  },
+  "Orange County": {
+    "lat": 33.7175,
+    "lng": -117.8311
+  },
+  "Oxnard": {
+    "lat": 34.1975,
+    "lng": -119.1771
+  },
+  "Palm Desert": {
+    "lat": 33.7225,
+    "lng": -116.3753
+  },
+  "Palm Springs": {
+    "lat": 33.8303,
+    "lng": -116.5453
+  },
+  "Palmdale": {
+    "lat": 34.5794,
+    "lng": -118.1165
+  },
+  "Palos Verdes Estates": {
+    "lat": 33.7867,
+    "lng": -118.3928
+  },
+  "Palos Verdes Peninsula": {
+    "lat": 33.7544376,
+    "lng": -118.3518178
+  },
+  "Paramount": {
+    "lat": 33.898917,
+    "lng": -118.171005
+  },
+  "Pasadena": {
+    "lat": 34.1478,
+    "lng": -118.1445
+  },
+  "Perris": {
+    "lat": 33.7825,
+    "lng": -117.2286
+  },
+  "Phelan": {
+    "lat": 34.426514,
+    "lng": -117.5730675
+  },
+  "Pico Rivera": {
+    "lat": 33.9831,
+    "lng": -118.0967
+  },
+  "Placentia": {
+    "lat": 33.8722,
+    "lng": -117.8703
+  },
+  "Pomona": {
+    "lat": 34.0553,
+    "lng": -117.7522
+  },
+  "Port Hueneme": {
+    "lat": 34.1477558,
+    "lng": -119.1951559
+  },
+  "Poway": {
+    "lat": 32.9628,
+    "lng": -117.0359
+  },
+  "Quartz Hill": {
+    "lat": 34.6452645,
+    "lng": -118.2181308
+  },
+  "Ramona": {
+    "lat": 33.0422,
+    "lng": -116.8731
+  },
+  "Rancho Bernardo": {
+    "lat": 33.015,
+    "lng": -117.0736
+  },
+  "Rancho Cucamonga": {
+    "lat": 34.1064,
+    "lng": -117.5931
+  },
+  "Rancho Mirage": {
+    "lat": 33.7397,
+    "lng": -116.4122
+  },
+  "Rancho Mission Viejo": {
+    "lat": 33.5017,
+    "lng": -117.6125
+  },
+  "Rancho Palos Verdes": {
+    "lat": 33.7444,
+    "lng": -118.387
+  },
+  "Rancho Santa Fe": {
+    "lat": 33.0242314,
+    "lng": -117.1979781
+  },
+  "Rancho Santa Margarita": {
+    "lat": 33.6408,
+    "lng": -117.6022
+  },
+  "Redlands": {
+    "lat": 34.0556,
+    "lng": -117.1825
+  },
+  "Redondo Beach": {
+    "lat": 33.8492,
+    "lng": -118.3884
+  },
+  "Rialto": {
+    "lat": 34.1064001,
+    "lng": -117.3703235
+  },
+  "Riverside": {
+    "lat": 33.9533,
+    "lng": -117.3961
+  },
+  "Riverside County": {
+    "lat": 33.7219991,
+    "lng": -116.0372472
+  },
+  "Rolling Hills Estates": {
+    "lat": 33.7875,
+    "lng": -118.3578
+  },
+  "Rosarito": {
+    "lat": 33.8477995,
+    "lng": -116.5325327
+  },
+  "Rosemead": {
+    "lat": 34.0803,
+    "lng": -118.0728
+  },
+  "Rossmoor": {
+    "lat": 33.7882498,
+    "lng": -118.0805933
+  },
+  "Rowland Heights": {
+    "lat": 33.9764,
+    "lng": -117.9056
+  },
+  "Running Springs": {
+    "lat": 34.2086,
+    "lng": -117.1086
+  },
+  "SANTA ROSA VA": {
+    "lat": 38.4404925,
+    "lng": -122.7141049
+  },
+  "San Bernardino": {
+    "lat": 34.1083,
+    "lng": -117.2898
+  },
+  "San Bernardino County": {
+    "lat": 34.1083,
+    "lng": -117.2898
+  },
+  "San Clemente": {
+    "lat": 33.4269,
+    "lng": -117.6111
+  },
+  "San Diego": {
+    "lat": 32.7157,
+    "lng": -117.1611
+  },
+  "San Diego County": {
+    "lat": 32.9595,
+    "lng": -116.9739
+  },
+  "San Dimas": {
+    "lat": 34.1067,
+    "lng": -117.8089
+  },
+  "San Fernando": {
+    "lat": 34.28497,
+    "lng": -118.437652
+  },
+  "San Gabriel": {
+    "lat": 34.0961,
+    "lng": -118.1058
+  },
+  "San Juan Capistrano": {
+    "lat": 33.5017,
+    "lng": -117.6625
+  },
+  "San Marcos": {
+    "lat": 33.1434,
+    "lng": -117.1661
+  },
+  "San Marino": {
+    "lat": 34.1215947,
+    "lng": -118.105739
+  },
+  "San Ysidro": {
+    "lat": 32.5544,
+    "lng": -117.0428
+  },
+  "Santa Ana": {
+    "lat": 33.7455,
+    "lng": -117.8678
+  },
+  "Santa Barbara": {
+    "lat": 34.4208,
+    "lng": -119.6982
+  },
+  "Santa Clarita": {
+    "lat": 34.3917,
+    "lng": -118.5426
+  },
+  "Santa Fe Springs": {
+    "lat": 33.9480787,
+    "lng": -118.0691499
+  },
+  "Santa Monica": {
+    "lat": 34.0195,
+    "lng": -118.4912
+  },
+  "Santa Paula": {
+    "lat": 34.3542,
+    "lng": -119.0597
+  },
+  "Santa Rosa Valley": {
+    "lat": 34.2456,
+    "lng": -118.9011
+  },
+  "Santee": {
+    "lat": 32.8386,
+    "lng": -116.9739
+  },
+  "Seal Beach": {
+    "lat": 33.7414,
+    "lng": -118.1047
+  },
+  "Sierra Madre": {
+    "lat": 34.1619,
+    "lng": -118.0528
+  },
+  "Signal Hill": {
+    "lat": 33.8047,
+    "lng": -118.167
+  },
+  "Silverado": {
+    "lat": 33.7461295,
+    "lng": -117.6369939
+  },
+  "Simi Valley": {
+    "lat": 34.2694,
+    "lng": -118.7814
+  },
+  "Solana Beach": {
+    "lat": 32.9595,
+    "lng": -117.2653
+  },
+  "Somis": {
+    "lat": 34.2572261,
+    "lng": -118.9962124
+  },
+  "South El Monte": {
+    "lat": 34.0519548,
+    "lng": -118.0467339
+  },
+  "South Gate": {
+    "lat": 33.9547,
+    "lng": -118.212
+  },
+  "South Pasadena": {
+    "lat": 34.1161,
+    "lng": -118.1303
+  },
+  "South San Gabriel": {
+    "lat": 34.047681,
+    "lng": -118.0960303
+  },
+  "South Whittier": {
+    "lat": 33.9359256,
+    "lng": -118.025477
+  },
+  "Spring Valley": {
+    "lat": 32.745,
+    "lng": -116.9994
+  },
+  "Stanton": {
+    "lat": 33.8025,
+    "lng": -118.0003
+  },
+  "Stevenson Ranch": {
+    "lat": 34.3947903,
+    "lng": -118.5885327
+  },
+  "Sugarloaf": {
+    "lat": 34.5613831,
+    "lng": -117.3144905
+  },
+  "Sun Valley": {
+    "lat": 34.2175,
+    "lng": -118.3781
+  },
+  "Temecula": {
+    "lat": 33.4936,
+    "lng": -117.1484
+  },
+  "Temescal Valley": {
+    "lat": 33.7631595,
+    "lng": -117.485255
+  },
+  "Temple City": {
+    "lat": 34.1022,
+    "lng": -118.0583
+  },
+  "Thermal": {
+    "lat": 33.6275782,
+    "lng": -116.1250453
+  },
+  "Thousand Oaks": {
+    "lat": 34.1706,
+    "lng": -118.8376
+  },
+  "Thousand Palms": {
+    "lat": 33.8077359,
+    "lng": -116.350814
+  },
+  "Tijuana": {
+    "lat": 32.5639513,
+    "lng": -117.1277635
+  },
+  "Topanga": {
+    "lat": 34.0675866,
+    "lng": -118.595672
+  },
+  "Torrance": {
+    "lat": 33.8358,
+    "lng": -118.3406
+  },
+  "Trabuco Canyon": {
+    "lat": 33.6597,
+    "lng": -117.5939
+  },
+  "Tustin": {
+    "lat": 33.7458,
+    "lng": -117.8261
+  },
+  "US": {
+    "lat": 34.2727885,
+    "lng": -119.2609533
+  },
+  "Upland": {
+    "lat": 34.0975,
+    "lng": -117.6484
+  },
+  "Valinda": {
+    "lat": 34.0378,
+    "lng": -117.9331
+  },
+  "Ventura": {
+    "lat": 34.2746,
+    "lng": -119.229
+  },
+  "Ventura County": {
+    "lat": 34.2746,
+    "lng": -119.229
+  },
+  "Victorville": {
+    "lat": 34.5361067,
+    "lng": -117.2911565
+  },
+  "View Park-Windsor Hills": {
+    "lat": 33.9954683,
+    "lng": -118.3510081
+  },
+  "Villa Park": {
+    "lat": 33.8147,
+    "lng": -117.8131
+  },
+  "Vista": {
+    "lat": 33.2,
+    "lng": -117.2425
+  },
+  "Walnut": {
+    "lat": 34.0214,
+    "lng": -117.8603
+  },
+  "West Athens": {
+    "lat": 33.924006,
+    "lng": -118.3002792
+  },
+  "West Carson": {
+    "lat": 33.8325587,
+    "lng": -118.2931554
+  },
+  "West Covina": {
+    "lat": 34.0686,
+    "lng": -117.939
+  },
+  "West Hollywood": {
+    "lat": 34.09,
+    "lng": -118.3617
+  },
+  "Westlake Village": {
+    "lat": 34.1622,
+    "lng": -118.8194
+  },
+  "Westminster": {
+    "lat": 33.7514,
+    "lng": -117.9939
+  },
+  "Whittier": {
+    "lat": 33.9792,
+    "lng": -118.0328
+  },
+  "Wildomar": {
+    "lat": 33.5986,
+    "lng": -117.28
+  },
+  "Winchester": {
+    "lat": 33.7028,
+    "lng": -117.0886
+  },
+  "Woodcrest": {
+    "lat": 33.8917,
+    "lng": -117.3322
+  },
+  "Woodland Hills": {
+    "lat": 34.1684,
+    "lng": -118.6058
+  },
+  "Wrightwood": {
+    "lat": 34.3556399,
+    "lng": -117.6291741
+  },
+  "Yorba Linda": {
+    "lat": 33.8886,
+    "lng": -117.8131
+  },
+  "Yucaipa": {
+    "lat": 34.033625,
+    "lng": -117.0430865
+  },
+  "Yucca Valley": {
+    "lat": 34.1142,
+    "lng": -116.432
+  }
+}

@@ -2,5 +2,5 @@
 __pycache__/
 *.pyc
 *.html.bak
-scripts/socal_results.csv
+scripts/dupr_export_*.html
 .venv/
