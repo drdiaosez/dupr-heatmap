@@ -316,7 +316,7 @@ function refresh() {
       radius: r, color: '#1e3a5f', weight: 1.2, fillColor: '#3b82f6', fillOpacity: 0.75
     })
     .bindTooltip(c.city + ' (' + filtered.length + ')', { direction: 'top', offset: [0, -4] })
-    .on('click', () => openPanel(c, filterPlayers(c.players, getFilters())));
+    .on('click', () => { if (spotlightMarker) { map.removeLayer(spotlightMarker); spotlightMarker = null; } searchInput.value = ''; acBox.classList.remove('show'); openPanel(c, filterPlayers(c.players, getFilters())); });
     m.addTo(map); markers.push(m);
   });
 

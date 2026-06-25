@@ -12,95 +12,109 @@ dupr-heatmap/
 │       ├── city_data.json    # Players grouped by city with lat/lng
 │       └── all_players.json  # Flat player list for search autocomplete
 ├── scripts/
+│   ├── fetch_dupr.py    # Opens browser, logs in, scrolls + saves HTML
 │   ├── scrape.py        # Parses a DUPR HTML export → updates data/
 │   └── socal_results.csv    # Last scraped raw data (for reference)
-└── deploy/
-    ├── deploy.sh        # rsync public/ to your droplet
-    └── nginx.conf       # Nginx site config
+├── deploy/
+│   ├── deploy.sh        # rsync public/ to your droplet
+│   └── nginx.conf       # Nginx site config (reference only — site uses Caddy)
+└── .venv/               # Python virtual environment (not committed)
 ```
+
+---
+
+## First-time Python setup
+
+The scripts require a virtual environment. Run this once from the project root:
+
+```bash
+cd ~/Desktop/pickle-bot/dupr-heatmap
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+pip install playwright beautifulsoup4 pandas
+playwright install chromium
+```
+
+> **Every new terminal session:** run `source .venv/bin/activate` before using any scripts.
 
 ---
 
 ## Updating the data
 
-1. Go to DUPR, filter to your region, save the page:
-   - In Chrome DevTools console: `copy(document.documentElement.outerHTML)`
-   - Paste into a text editor, save as e.g. `fresh.html`
+This is the regular workflow once everything is set up.
 
-2. Run the scraper:
-   ```bash
-   cd scripts
-   pip install beautifulsoup4 pandas   # first time only
-   python scrape.py /path/to/fresh.html
-   ```
+### Option A — automated (recommended)
 
-3. This overwrites `public/data/city_data.json` and `public/data/all_players.json`.
+```bash
+source .venv/bin/activate
+python scripts/fetch_dupr.py
+```
 
-4. Deploy (see below).
+This opens a real Chrome window. Log in to DUPR, make sure your filters are set
+(location: Irvine CA, 100mi, Men, Doubles, DUPR 4–8, Age 19–50), then press Enter
+in the terminal. The script scrolls through all players automatically and saves a
+timestamped HTML file to `scripts/`.
+
+### Option B — manual
+
+1. Go to [dashboard.dupr.com/dashboard/browse/players](https://dashboard.dupr.com/dashboard/browse/players), apply your filters
+2. In Chrome DevTools console: `copy(document.documentElement.outerHTML)`
+3. Paste into a text editor and save as e.g. `fresh.html`
+
+### Then parse + deploy
+
+```bash
+# Parse the HTML → updates public/data/*.json
+python scripts/scrape.py scripts/dupr_export_TIMESTAMP.html
+
+# Deploy to the live site
+./deploy/deploy.sh
+
+# Commit
+git add .
+git commit -m "update player data"
+git push
+```
 
 ---
 
-## First-time server setup (DigitalOcean + Porkbun)
+## Server setup (DigitalOcean + Porkbun)
 
-### 1. Create a droplet
-- Ubuntu 22.04 LTS, any size (the $6/mo basic is fine)
-- Add your SSH key during creation
+The site runs on a DigitalOcean droplet at `67.205.139.219` using **Caddy** (not Nginx)
+for HTTPS. It's served at `dupr.pickle-play-bot.xyz`.
 
-### 2. Point your Porkbun domain to the droplet
-In Porkbun DNS settings, add:
-- **A record**: `@` → your droplet IP
-- **A record**: `www` → your droplet IP
-- (DNS propagation takes up to 30 min)
+### Caddy config (on the droplet)
 
-### 3. SSH into the droplet and install Nginx
-```bash
-ssh root@YOUR_DROPLET_IP
-
-apt update && apt install -y nginx certbot python3-certbot-nginx
-
-# Create the web root
-mkdir -p /var/www/dupr-heatmap
+```
+dupr.pickle-play-bot.xyz {
+    root * /var/www/dupr-heatmap
+    file_server
+    encode gzip
+}
 ```
 
-### 4. Configure Nginx
-```bash
-# From your local machine:
-scp deploy/nginx.conf root@YOUR_DROPLET_IP:/etc/nginx/sites-available/dupr-heatmap
+Added to `/etc/caddy/Caddyfile` alongside the other sites. Caddy handles HTTPS automatically.
 
-# On the droplet:
-ln -s /etc/nginx/sites-available/dupr-heatmap /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-```
+### DNS (Porkbun)
 
-Edit `nginx.conf` first — replace `yourdomain.com` with your actual domain.
+A record: `dupr` → `67.205.139.219`
 
-### 5. Deploy the site
-```bash
-# Edit deploy/deploy.sh — set DROPLET_IP to your droplet's IP
-chmod +x deploy/deploy.sh
-./deploy/deploy.sh
-```
-
-### 6. Enable HTTPS (free via Let's Encrypt)
-```bash
-# On the droplet:
-certbot --nginx -d yourdomain.com -d www.yourdomain.com
-```
-Then uncomment the HTTPS block in `nginx.conf` and reload Nginx.
-
----
-
-## Updating the live site
+### Web root ownership
 
 ```bash
-# 1. Scrape new data
-python scripts/scrape.py /path/to/new_export.html
-
-# 2. Push to server
-./deploy/deploy.sh
+sudo mkdir -p /var/www/dupr-heatmap
+sudo chown bot:bot /var/www/dupr-heatmap
 ```
 
-That's it — no build step, no npm, just static files.
+### deploy.sh settings
+
+```bash
+DROPLET_IP="67.205.139.219"
+DROPLET_USER="bot"
+REMOTE_PATH="/var/www/dupr-heatmap"
+```
 
 ---
 

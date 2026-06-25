@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 *.html.bak
 scripts/socal_results.csv
+.venv/
