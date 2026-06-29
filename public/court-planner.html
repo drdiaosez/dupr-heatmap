@@ -16,7 +16,9 @@
   .search-row button { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: white; font-size: 14px; cursor: pointer; white-space: nowrap; }
   .search-row button:hover { background: #f0f0ee; }
   .search-row button:disabled { opacity: 0.5; cursor: not-allowed; }
-  #map-wrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #ddd; background: #e8e8e4; }
+  #map-wrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #ddd; background: #e8e8e4; user-select: none; }
+  #map-wrap.dragging { cursor: grabbing; }
+  #map-wrap.draggable { cursor: grab; }
   #map { width: 100%; height: 500px; }
   #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
   .placeholder { display: flex; align-items: center; justify-content: center; height: 500px; flex-direction: column; gap: 12px; color: #999; }
@@ -29,17 +31,17 @@
   .ctrl select, .ctrl input[type=range] { width: 100%; }
   .ctrl select { padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: white; }
   .ctrl-full { grid-column: 1 / -1; }
-  .info { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid #eee; }
+  .info { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid #eee; align-items: center; }
   .badge { font-size: 12px; padding: 3px 10px; border-radius: 6px; background: #e6f1fb; color: #185fa5; }
   .badge.tip { background: #faeeda; color: #854f0b; }
-  a { color: #185fa5; }
   .attr { position: absolute; bottom: 6px; right: 8px; font-size: 11px; color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
+  .hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.45); padding: 4px 12px; border-radius: 20px; pointer-events: none; white-space: nowrap; transition: opacity 0.4s; }
 </style>
 </head>
 <body>
 <div id="app">
   <h1>Pickleball court planner</h1>
-  <p class="sub">Overlay a scaled pickleball court on satellite imagery to check lot fit.</p>
+  <p class="sub">Search an address, then drag the map to position. Use controls to rotate and resize.</p>
   <div class="search-row">
     <input type="text" id="addr" placeholder="123 Main St, Anytown, CA" />
     <button id="go-btn" onclick="loadMap()">Search</button>
@@ -52,14 +54,14 @@
     <div id="map" style="display:none;"></div>
     <canvas id="overlay" style="display:none;"></canvas>
     <div class="attr" id="attr" style="display:none;">© Esri, Maxar, Earthstar Geographics</div>
+    <div class="hint" id="hint" style="display:none;">Drag to pan map</div>
   </div>
   <div class="controls">
     <div class="ctrl">
-      <label>Court type</label>
+      <label>Court layout</label>
       <select id="court-type" onchange="redraw()">
-        <option value="doubles">Doubles — 44' × 34'</option>
-        <option value="singles">Singles — 44' × 20'</option>
-        <option value="rec">Rec w/ buffers — 64' × 54'</option>
+        <option value="standard">Standard — 44' × 20'</option>
+        <option value="rec">Rec w/ buffers — 64' × 40'</option>
       </select>
     </div>
     <div class="ctrl">
@@ -70,30 +72,94 @@
       <label>Rotation <span id="rot-val">0°</span></label>
       <input type="range" id="rot" min="0" max="359" step="1" value="0" oninput="redraw()" />
     </div>
-    <div class="ctrl">
-      <label>Move left / right <span id="ox-val">0</span></label>
-      <input type="range" id="ox" min="-220" max="220" step="1" value="0" oninput="redraw()" />
-    </div>
-    <div class="ctrl">
-      <label>Move up / down <span id="oy-val">0</span></label>
-      <input type="range" id="oy" min="-220" max="220" step="1" value="0" oninput="redraw()" />
+    <div class="ctrl ctrl-full">
+      <label>Court opacity <span id="opacity-val">75%</span></label>
+      <input type="range" id="opacity" min="20" max="100" step="5" value="75" oninput="redraw()" />
     </div>
     <div class="info">
-      <span class="badge" id="dims-badge">Doubles — 44' × 34'</span>
-      <span class="badge tip">Tip: zoom 19–20 works best for residential lots</span>
+      <span class="badge" id="dims-badge">Standard — 44' × 20'</span>
+      <span class="badge tip">Drag the map to pan · Zoom 19–20 works best</span>
     </div>
   </div>
 </div>
 
 <script>
-const COURTS = {
-  doubles: { w: 34, h: 44, label: "Doubles — 44' × 34'" },
-  singles: { w: 20, h: 44, label: "Singles — 44' × 20'" },
-  rec:     { w: 54, h: 64, label: "Rec w/ buffers — 64' × 54'" }
-};
-
 let lat = null, lng = null, zoom = 19;
+// mapOffset tracks how many pixels the map has been dragged from its initial center
+let mapOffsetX = 0, mapOffsetY = 0;
+let isDragging = false, dragStartX = 0, dragStartY = 0, dragStartOffX = 0, dragStartOffY = 0;
 let mapCanvas = null, mctx = null;
+let lastTileParams = null;
+
+function buildCourtCanvas(scale, withBuffers) {
+  const COURT_L = 44, COURT_W = 20, KITCHEN = 7;
+  const BUF_END = 10, BUF_SIDE = 10;
+  const totalL = withBuffers ? COURT_L + BUF_END * 2 : COURT_L;
+  const totalW = withBuffers ? COURT_W + BUF_SIDE * 2 : COURT_W;
+  const W = Math.round(totalW * scale);
+  const H = Math.round(totalL * scale);
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const p = ft => ft * scale;
+
+  if (withBuffers) {
+    ctx.fillStyle = '#6aaa6a';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([p(1.5), p(1)]);
+    ctx.strokeRect(0.75, 0.75, W - 1.5, H - 1.5);
+    ctx.setLineDash([]);
+  }
+
+  const ox = withBuffers ? p(BUF_SIDE) : 0;
+  const oy = withBuffers ? p(BUF_END) : 0;
+  const cW = p(COURT_W), cH = p(COURT_L);
+  const netY = oy + p(COURT_L / 2);          // net at 22' from each baseline
+  const kitchenTop = netY - p(KITCHEN);       // NVZ line: 7' above net (15' from top baseline)
+  const kitchenBot = netY + p(KITCHEN);       // NVZ line: 7' below net (15' from bottom baseline)
+  const midX = ox + p(COURT_W / 2);
+
+  // Base: fill entire court blue (service area color)
+  ctx.fillStyle = '#3a7fd4';
+  ctx.fillRect(ox, oy, cW, cH);
+
+  // Service area halves — alternating shades left/right
+  ctx.fillStyle = '#2d6bbf';
+  ctx.fillRect(ox,    oy, p(COURT_W / 2), p(COURT_L / 2));      // top-left service
+  ctx.fillRect(midX,  netY, p(COURT_W / 2), p(COURT_L / 2));    // bottom-right service
+  ctx.fillStyle = '#4a8fd6';
+  ctx.fillRect(midX,  oy, p(COURT_W / 2), p(COURT_L / 2));      // top-right service
+  ctx.fillRect(ox,    netY, p(COURT_W / 2), p(COURT_L / 2));    // bottom-left service
+
+  // Kitchen (NVZ) zones — red, 7' from net on each side, full width
+  ctx.fillStyle = '#c94040';
+  ctx.fillRect(ox, kitchenTop, cW, p(KITCHEN));   // top kitchen (between kitchenTop and netY)
+  ctx.fillRect(ox, netY, cW, p(KITCHEN));          // bottom kitchen (between netY and kitchenBot)
+
+  const lw = Math.max(1.5, scale * 0.15);
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = lw;
+  ctx.lineJoin = 'miter';
+  ctx.setLineDash([]);
+  ctx.strokeRect(ox + lw/2, oy + lw/2, cW - lw, cH - lw);
+  // NVZ lines (kitchen boundaries)
+  ctx.beginPath(); ctx.moveTo(ox, kitchenTop); ctx.lineTo(ox + cW, kitchenTop); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ox, kitchenBot); ctx.lineTo(ox + cW, kitchenBot); ctx.stroke();
+  // Centerline runs through service areas only (baseline to kitchen line)
+  ctx.beginPath(); ctx.moveTo(midX, oy); ctx.lineTo(midX, kitchenTop); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(midX, kitchenBot); ctx.lineTo(midX, oy + cH); ctx.stroke();
+
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = Math.max(2, scale * 0.25);
+  ctx.beginPath(); ctx.moveTo(ox, netY); ctx.lineTo(ox + cW, netY); ctx.stroke();
+  const postR = Math.max(2.5, scale * 0.3);
+  ctx.fillStyle = '#aaa';
+  ctx.beginPath(); ctx.arc(ox, netY, postR, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ox + cW, netY, postR, 0, Math.PI*2); ctx.fill();
+  return c;
+}
 
 function metersPerPx(lat, z) {
   return (156543.03392 * Math.cos(lat * Math.PI / 180)) / Math.pow(2, z);
@@ -106,9 +172,10 @@ function latLngToTile(lat, lng, z) {
 }
 function tileTopLeft(tx, ty, z) {
   const n = Math.pow(2, z);
-  const lng = tx / n * 360 - 180;
-  const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * ty / n)));
-  return { lat: latRad * 180 / Math.PI, lng };
+  return {
+    lat: Math.atan(Math.sinh(Math.PI * (1 - 2 * ty / n))) * 180 / Math.PI,
+    lng: tx / n * 360 - 180
+  };
 }
 
 async function loadMap() {
@@ -124,7 +191,13 @@ async function loadMap() {
     lat = parseFloat(d[0].lat);
     lng = parseFloat(d[0].lon);
     zoom = parseInt(document.getElementById('zoom').value);
+    mapOffsetX = 0;
+    mapOffsetY = 0;
     renderTiles();
+    const hint = document.getElementById('hint');
+    hint.style.display = 'block';
+    hint.style.opacity = '1';
+    setTimeout(() => { hint.style.opacity = '0'; setTimeout(() => { hint.style.display = 'none'; }, 400); }, 3000);
   } catch(e) {
     alert('Geocoding failed. Check your internet connection.');
   } finally {
@@ -145,6 +218,7 @@ function renderTiles() {
   mapDiv.style.display = 'block';
   overlayCanvas.style.display = 'block';
   document.getElementById('attr').style.display = 'block';
+  wrap.classList.add('draggable');
 
   mapDiv.style.width = W + 'px';
   mapDiv.style.height = H + 'px';
@@ -155,8 +229,7 @@ function renderTiles() {
 
   mapDiv.innerHTML = '';
   mapCanvas = document.createElement('canvas');
-  mapCanvas.width = W;
-  mapCanvas.height = H;
+  mapCanvas.width = W; mapCanvas.height = H;
   mapCanvas.style.cssText = `width:${W}px;height:${H}px;display:block;`;
   mapDiv.appendChild(mapCanvas);
   mctx = mapCanvas.getContext('2d');
@@ -170,26 +243,49 @@ function renderTiles() {
   const pxOffX = ((lng - tl.lng) / lngPerTile) * TS;
   const pxOffY = ((tl.lat - lat) / latPerTile) * TS;
 
-  const nx = Math.ceil(W / TS) + 3;
-  const ny = Math.ceil(H / TS) + 3;
+  // Use extra tiles so panning doesn't show blank edges
+  const nx = Math.ceil(W / TS) + 5;
+  const ny = Math.ceil(H / TS) + 5;
   const stx = ct.x - Math.floor(nx / 2);
   const sty = ct.y - Math.floor(ny / 2);
-  const originX = W / 2 - pxOffX - Math.floor(nx / 2) * TS;
-  const originY = H / 2 - pxOffY - Math.floor(ny / 2) * TS;
+
+  lastTileParams = { TS, nx, ny, stx, sty, originX: W / 2 - pxOffX - Math.floor(nx / 2) * TS, originY: H / 2 - pxOffY - Math.floor(ny / 2) * TS };
 
   let done = 0, total = nx * ny;
   for (let tx = 0; tx < nx; tx++) {
     for (let ty = 0; ty < ny; ty++) {
       const img = new Image();
-      const px = Math.round(originX + tx * TS);
-      const py = Math.round(originY + ty * TS);
-      img.onload = () => { mctx.drawImage(img, px, py, TS, TS); done++; if (done === total) redraw(); };
-      img.onerror = () => { done++; if (done === total) redraw(); };
+      img.crossOrigin = 'anonymous';
+      const px = Math.round(lastTileParams.originX + tx * TS);
+      const py = Math.round(lastTileParams.originY + ty * TS);
+      img.onload = () => { mctx.drawImage(img, px, py, TS, TS); done++; if (done === total) { applyMapOffset(); redraw(); } };
+      img.onerror = () => { done++; if (done === total) { applyMapOffset(); redraw(); } };
       img.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${sty+ty}/${stx+tx}`;
     }
   }
+
   window._meta = { W, H, mpp: metersPerPx(lat, zoom) };
   redraw();
+}
+
+// Re-draw the tile layer shifted by mapOffset, then redraw the court overlay
+function applyMapOffset() {
+  if (!mctx || !lastTileParams) return;
+  const { W, H } = window._meta;
+  const { TS, nx, ny, stx, sty, originX, originY } = lastTileParams;
+  mctx.clearRect(0, 0, W, H);
+  // re-stamp tiles — we keep them in an offscreen buffer per tile
+  // Since tiles are already loaded we just redraw from the img cache via re-fetch (they're browser-cached)
+  for (let tx = 0; tx < nx; tx++) {
+    for (let ty = 0; ty < ny; ty++) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const px = Math.round(originX + tx * TS + mapOffsetX);
+      const py = Math.round(originY + ty * TS + mapOffsetY);
+      img.onload = () => { mctx.drawImage(img, px, py, TS, TS); redraw(); };
+      img.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${sty+ty}/${stx+tx}`;
+    }
+  }
 }
 
 function redraw() {
@@ -201,59 +297,93 @@ function redraw() {
   ctx.clearRect(0, 0, W, H);
 
   const type = document.getElementById('court-type').value;
-  const dims = COURTS[type];
+  const withBuffers = type === 'rec';
   const rot = parseInt(document.getElementById('rot').value);
-  const ox = parseInt(document.getElementById('ox').value);
-  const oy = parseInt(document.getElementById('oy').value);
+  const opacity = parseInt(document.getElementById('opacity').value) / 100;
 
   document.getElementById('rot-val').textContent = rot + '°';
-  document.getElementById('ox-val').textContent = ox;
-  document.getElementById('oy-val').textContent = oy;
-  document.getElementById('dims-badge').textContent = dims.label;
+  document.getElementById('opacity-val').textContent = Math.round(opacity * 100) + '%';
+  document.getElementById('dims-badge').textContent = withBuffers ? "Rec w/ buffers — 64' × 40'" : "Standard — 44' × 20'";
 
   const FTM = 0.3048;
-  const cw = (dims.w * FTM) / mpp;
-  const ch = (dims.h * FTM) / mpp;
-  const cx = W / 2 + ox;
-  const cy = H / 2 + oy;
-  const angle = rot * Math.PI / 180;
+  const totalL_ft = withBuffers ? 64 : 44;
+  const totalW_ft = withBuffers ? 40 : 20;
+  const drawW = (totalW_ft * FTM) / mpp;
+  const drawH = (totalL_ft * FTM) / mpp;
+
+  const courtC = buildCourtCanvas(10, withBuffers);
+
+  // Court stays fixed at center of viewport; map pans beneath it
+  const cx = W / 2;
+  const cy = H / 2;
 
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(angle);
-
-  ctx.fillStyle = 'rgba(255,210,0,0.22)';
-  ctx.strokeStyle = 'rgba(255,210,0,0.95)';
-  ctx.lineWidth = 2.5;
-  ctx.fillRect(-cw/2, -ch/2, cw, ch);
-  ctx.strokeRect(-cw/2, -ch/2, cw, ch);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 1.5;
-
-  if (type !== 'rec') {
-    const kh = (7 * FTM) / mpp;
-    [-1, 1].forEach(side => {
-      const y = side * (ch/2 - kh);
-      ctx.beginPath(); ctx.moveTo(-cw/2, y); ctx.lineTo(cw/2, y); ctx.stroke();
-    });
-    ctx.beginPath(); ctx.moveTo(0, -ch/2 + kh); ctx.lineTo(0, ch/2 - kh); ctx.stroke();
-  } else {
-    const iw = (34 * FTM) / mpp;
-    const ih = (44 * FTM) / mpp;
-    ctx.setLineDash([6, 5]);
-    ctx.strokeRect(-iw/2, -ih/2, iw, ih);
-    ctx.setLineDash([]);
-  }
-
+  ctx.rotate(rot * Math.PI / 180);
+  ctx.globalAlpha = opacity;
+  ctx.drawImage(courtC, -drawW / 2, -drawH / 2, drawW, drawH);
+  ctx.globalAlpha = 1;
   ctx.restore();
 }
 
 function onZoom(z) {
   zoom = parseInt(z);
   document.getElementById('zoom-val').textContent = z;
-  if (lat !== null) renderTiles();
+  if (lat !== null) {
+    mapOffsetX = 0;
+    mapOffsetY = 0;
+    renderTiles();
+  }
 }
+
+// --- Drag to pan ---
+const wrap = document.getElementById('map-wrap');
+
+wrap.addEventListener('mousedown', e => {
+  if (lat === null) return;
+  isDragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragStartOffX = mapOffsetX;
+  dragStartOffY = mapOffsetY;
+  wrap.classList.add('dragging');
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  mapOffsetX = dragStartOffX + (e.clientX - dragStartX);
+  mapOffsetY = dragStartOffY + (e.clientY - dragStartY);
+  applyMapOffset();
+  redraw();
+});
+
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+  wrap.classList.remove('dragging');
+});
+
+// Touch support
+wrap.addEventListener('touchstart', e => {
+  if (lat === null || e.touches.length !== 1) return;
+  isDragging = true;
+  dragStartX = e.touches[0].clientX;
+  dragStartY = e.touches[0].clientY;
+  dragStartOffX = mapOffsetX;
+  dragStartOffY = mapOffsetY;
+  e.preventDefault();
+}, { passive: false });
+
+window.addEventListener('touchmove', e => {
+  if (!isDragging || e.touches.length !== 1) return;
+  mapOffsetX = dragStartOffX + (e.touches[0].clientX - dragStartX);
+  mapOffsetY = dragStartOffY + (e.touches[0].clientY - dragStartY);
+  applyMapOffset();
+  redraw();
+  e.preventDefault();
+}, { passive: false });
+
+window.addEventListener('touchend', () => { isDragging = false; });
 
 document.getElementById('addr').addEventListener('keydown', e => { if (e.key === 'Enter') loadMap(); });
 </script>
