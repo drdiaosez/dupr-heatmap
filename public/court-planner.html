@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pickleball Court Planner</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f0; color: #1a1a18; }
+  #app { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+  .sub { font-size: 14px; color: #666; margin-bottom: 16px; }
+  .search-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .search-row input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+  .search-row input:focus { border-color: #378add; box-shadow: 0 0 0 3px rgba(55,138,221,0.15); }
+  .search-row button { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: white; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .search-row button:hover { background: #f0f0ee; }
+  .search-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #map-wrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #ddd; background: #e8e8e4; }
+  #map { width: 100%; height: 500px; }
+  #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
+  .placeholder { display: flex; align-items: center; justify-content: center; height: 500px; flex-direction: column; gap: 12px; color: #999; }
+  .placeholder svg { width: 48px; height: 48px; opacity: 0.4; }
+  .placeholder p { font-size: 14px; }
+  .controls { background: white; border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ctrl { display: flex; flex-direction: column; gap: 6px; }
+  .ctrl label { font-size: 13px; color: #555; display: flex; justify-content: space-between; }
+  .ctrl label span { font-weight: 500; color: #1a1a18; }
+  .ctrl select, .ctrl input[type=range] { width: 100%; }
+  .ctrl select { padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: white; }
+  .ctrl-full { grid-column: 1 / -1; }
+  .info { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid #eee; }
+  .badge { font-size: 12px; padding: 3px 10px; border-radius: 6px; background: #e6f1fb; color: #185fa5; }
+  .badge.tip { background: #faeeda; color: #854f0b; }
+  a { color: #185fa5; }
+  .attr { position: absolute; bottom: 6px; right: 8px; font-size: 11px; color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Pickleball court planner</h1>
+  <p class="sub">Overlay a scaled pickleball court on satellite imagery to check lot fit.</p>
+  <div class="search-row">
+    <input type="text" id="addr" placeholder="123 Main St, Anytown, CA" />
+    <button id="go-btn" onclick="loadMap()">Search</button>
+  </div>
+  <div id="map-wrap">
+    <div class="placeholder" id="placeholder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+      <p>Enter an address above to get started</p>
+    </div>
+    <div id="map" style="display:none;"></div>
+    <canvas id="overlay" style="display:none;"></canvas>
+    <div class="attr" id="attr" style="display:none;">© Esri, Maxar, Earthstar Geographics</div>
+  </div>
+  <div class="controls">
+    <div class="ctrl">
+      <label>Court type</label>
+      <select id="court-type" onchange="redraw()">
+        <option value="doubles">Doubles — 44' × 34'</option>
+        <option value="singles">Singles — 44' × 20'</option>
+        <option value="rec">Rec w/ buffers — 64' × 54'</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>Zoom <span id="zoom-val">19</span></label>
+      <input type="range" id="zoom" min="17" max="21" step="1" value="19" oninput="onZoom(this.value)" />
+    </div>
+    <div class="ctrl ctrl-full">
+      <label>Rotation <span id="rot-val">0°</span></label>
+      <input type="range" id="rot" min="0" max="359" step="1" value="0" oninput="redraw()" />
+    </div>
+    <div class="ctrl">
+      <label>Move left / right <span id="ox-val">0</span></label>
+      <input type="range" id="ox" min="-220" max="220" step="1" value="0" oninput="redraw()" />
+    </div>
+    <div class="ctrl">
+      <label>Move up / down <span id="oy-val">0</span></label>
+      <input type="range" id="oy" min="-220" max="220" step="1" value="0" oninput="redraw()" />
+    </div>
+    <div class="info">
+      <span class="badge" id="dims-badge">Doubles — 44' × 34'</span>
+      <span class="badge tip">Tip: zoom 19–20 works best for residential lots</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const COURTS = {
+  doubles: { w: 34, h: 44, label: "Doubles — 44' × 34'" },
+  singles: { w: 20, h: 44, label: "Singles — 44' × 20'" },
+  rec:     { w: 54, h: 64, label: "Rec w/ buffers — 64' × 54'" }
+};
+
+let lat = null, lng = null, zoom = 19;
+let mapCanvas = null, mctx = null;
+
+function metersPerPx(lat, z) {
+  return (156543.03392 * Math.cos(lat * Math.PI / 180)) / Math.pow(2, z);
+}
+function latLngToTile(lat, lng, z) {
+  return {
+    x: Math.floor((lng + 180) / 360 * Math.pow(2, z)),
+    y: Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, z))
+  };
+}
+function tileTopLeft(tx, ty, z) {
+  const n = Math.pow(2, z);
+  const lng = tx / n * 360 - 180;
+  const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * ty / n)));
+  return { lat: latRad * 180 / Math.PI, lng };
+}
+
+async function loadMap() {
+  const addr = document.getElementById('addr').value.trim();
+  if (!addr) return;
+  const btn = document.getElementById('go-btn');
+  btn.textContent = 'Loading…';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`, { headers: { 'Accept-Language': 'en' } });
+    const d = await r.json();
+    if (!d.length) { alert('Address not found — try a more specific address.'); return; }
+    lat = parseFloat(d[0].lat);
+    lng = parseFloat(d[0].lon);
+    zoom = parseInt(document.getElementById('zoom').value);
+    renderTiles();
+  } catch(e) {
+    alert('Geocoding failed. Check your internet connection.');
+  } finally {
+    btn.textContent = 'Search';
+    btn.disabled = false;
+  }
+}
+
+function renderTiles() {
+  if (lat === null) return;
+  const wrap = document.getElementById('map-wrap');
+  const mapDiv = document.getElementById('map');
+  const overlayCanvas = document.getElementById('overlay');
+  const W = wrap.offsetWidth;
+  const H = 500;
+
+  document.getElementById('placeholder').style.display = 'none';
+  mapDiv.style.display = 'block';
+  overlayCanvas.style.display = 'block';
+  document.getElementById('attr').style.display = 'block';
+
+  mapDiv.style.width = W + 'px';
+  mapDiv.style.height = H + 'px';
+  overlayCanvas.width = W;
+  overlayCanvas.height = H;
+  overlayCanvas.style.width = W + 'px';
+  overlayCanvas.style.height = H + 'px';
+
+  mapDiv.innerHTML = '';
+  mapCanvas = document.createElement('canvas');
+  mapCanvas.width = W;
+  mapCanvas.height = H;
+  mapCanvas.style.cssText = `width:${W}px;height:${H}px;display:block;`;
+  mapDiv.appendChild(mapCanvas);
+  mctx = mapCanvas.getContext('2d');
+
+  const TS = 256;
+  const ct = latLngToTile(lat, lng, zoom);
+  const tl = tileTopLeft(ct.x, ct.y, zoom);
+  const tlNext = tileTopLeft(ct.x + 1, ct.y + 1, zoom);
+  const lngPerTile = tlNext.lng - tl.lng;
+  const latPerTile = tl.lat - tlNext.lat;
+  const pxOffX = ((lng - tl.lng) / lngPerTile) * TS;
+  const pxOffY = ((tl.lat - lat) / latPerTile) * TS;
+
+  const nx = Math.ceil(W / TS) + 3;
+  const ny = Math.ceil(H / TS) + 3;
+  const stx = ct.x - Math.floor(nx / 2);
+  const sty = ct.y - Math.floor(ny / 2);
+  const originX = W / 2 - pxOffX - Math.floor(nx / 2) * TS;
+  const originY = H / 2 - pxOffY - Math.floor(ny / 2) * TS;
+
+  let done = 0, total = nx * ny;
+  for (let tx = 0; tx < nx; tx++) {
+    for (let ty = 0; ty < ny; ty++) {
+      const img = new Image();
+      const px = Math.round(originX + tx * TS);
+      const py = Math.round(originY + ty * TS);
+      img.onload = () => { mctx.drawImage(img, px, py, TS, TS); done++; if (done === total) redraw(); };
+      img.onerror = () => { done++; if (done === total) redraw(); };
+      img.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${sty+ty}/${stx+tx}`;
+    }
+  }
+  window._meta = { W, H, mpp: metersPerPx(lat, zoom) };
+  redraw();
+}
+
+function redraw() {
+  const meta = window._meta;
+  if (!meta) return;
+  const { W, H, mpp } = meta;
+  const canvas = document.getElementById('overlay');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const type = document.getElementById('court-type').value;
+  const dims = COURTS[type];
+  const rot = parseInt(document.getElementById('rot').value);
+  const ox = parseInt(document.getElementById('ox').value);
+  const oy = parseInt(document.getElementById('oy').value);
+
+  document.getElementById('rot-val').textContent = rot + '°';
+  document.getElementById('ox-val').textContent = ox;
+  document.getElementById('oy-val').textContent = oy;
+  document.getElementById('dims-badge').textContent = dims.label;
+
+  const FTM = 0.3048;
+  const cw = (dims.w * FTM) / mpp;
+  const ch = (dims.h * FTM) / mpp;
+  const cx = W / 2 + ox;
+  const cy = H / 2 + oy;
+  const angle = rot * Math.PI / 180;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  ctx.fillStyle = 'rgba(255,210,0,0.22)';
+  ctx.strokeStyle = 'rgba(255,210,0,0.95)';
+  ctx.lineWidth = 2.5;
+  ctx.fillRect(-cw/2, -ch/2, cw, ch);
+  ctx.strokeRect(-cw/2, -ch/2, cw, ch);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 1.5;
+
+  if (type !== 'rec') {
+    const kh = (7 * FTM) / mpp;
+    [-1, 1].forEach(side => {
+      const y = side * (ch/2 - kh);
+      ctx.beginPath(); ctx.moveTo(-cw/2, y); ctx.lineTo(cw/2, y); ctx.stroke();
+    });
+    ctx.beginPath(); ctx.moveTo(0, -ch/2 + kh); ctx.lineTo(0, ch/2 - kh); ctx.stroke();
+  } else {
+    const iw = (34 * FTM) / mpp;
+    const ih = (44 * FTM) / mpp;
+    ctx.setLineDash([6, 5]);
+    ctx.strokeRect(-iw/2, -ih/2, iw, ih);
+    ctx.setLineDash([]);
+  }
+
+  ctx.restore();
+}
+
+function onZoom(z) {
+  zoom = parseInt(z);
+  document.getElementById('zoom-val').textContent = z;
+  if (lat !== null) renderTiles();
+}
+
+document.getElementById('addr').addEventListener('keydown', e => { if (e.key === 'Enter') loadMap(); });
+</script>
+</body>
+</html>
