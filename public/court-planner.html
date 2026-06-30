@@ -385,12 +385,19 @@ function toggleLock() {
   locked = !locked;
   const btn = document.getElementById('lock-btn');
   if (locked) {
-    // Snap court offset to current map offset so it doesn't jump
-    courtOffsetX = mapOffsetX;
-    courtOffsetY = mapOffsetY;
+    // While unlocked the court is always drawn at screen-center (offset 0,0),
+    // regardless of how far the map has been panned. So locking should snap
+    // the court's offset to 0,0 — its actual current on-screen position —
+    // not to the map's pan offset.
+    courtOffsetX = 0;
+    courtOffsetY = 0;
     btn.textContent = '🔒 Court locked to map';
     btn.classList.add('locked');
   } else {
+    // Unlocking: snap the court back to screen-center, since that's where
+    // it's meant to sit whenever the court is not locked to the map.
+    courtOffsetX = 0;
+    courtOffsetY = 0;
     btn.textContent = '🔓 Lock court to map';
     btn.classList.remove('locked');
   }
