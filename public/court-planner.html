@@ -34,6 +34,7 @@
   .badge { font-size: 12px; padding: 3px 10px; border-radius: 6px; background: #e6f1fb; color: #185fa5; }
   .badge.tip { background: #faeeda; color: #854f0b; }
   .badge.marker-legend { background: #fbe9e9; color: #a02020; }
+  .badge.setback-legend { background: #fde8e8; color: #b91c1c; }
   .lock-btn { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; background: white; font-size: 13px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
   .lock-btn:hover { background: #f0f0ee; }
   .lock-btn.locked { background: #fbe9e9; border-color: #d98c8c; color: #a02020; font-weight: 500; }
@@ -69,6 +70,7 @@
       <select id="court-type" onchange="onCourtTypeChange()">
         <option value="standard">Standard — 44' × 20'</option>
         <option value="rec">Rec w/ buffers — 64' × 40'</option>
+        <option value="torrance">Torrance setback — 250 ft radius</option>
       </select>
     </div>
     <div class="ctrl">
@@ -90,6 +92,7 @@
       <span class="badge" id="dims-badge">Standard — 44' × 20'</span>
       <span class="badge tip">Drag the map to pan · Zoom 19–20 works best</span>
       <span class="badge marker-legend">📍 marks the searched address</span>
+      <span class="badge setback-legend" id="setback-legend" style="display:none;">⭕ 250ft Torrance noise ordinance setback from residential structures</span>
     </div>
   </div>
   <div class="share-row" id="share-row" style="display:none;">
@@ -486,7 +489,12 @@ function redraw() {
   document.getElementById('rot-val').textContent = state.rotation + '°';
   document.getElementById('opacity-val').textContent = state.opacity + '%';
   const withBuffers = state.courtType === 'rec';
-  document.getElementById('dims-badge').textContent = withBuffers ? "Rec w/ buffers — 64' × 40'" : "Standard — 44' × 20'";
+  const showSetback = state.courtType === 'torrance';
+  const dimsLabel = withBuffers ? "Rec w/ buffers — 64' × 40'"
+    : showSetback ? "Standard — 44' × 20' + 250ft setback"
+    : "Standard — 44' × 20'";
+  document.getElementById('dims-badge').textContent = dimsLabel;
+  document.getElementById('setback-legend').style.display = showSetback ? 'inline-block' : 'none';
 
   const mpp = metersPerPx(mapCenterLat, state.zoom);
   const FTM = 0.3048;
@@ -497,10 +505,29 @@ function redraw() {
 
   const courtC = buildCourtCanvas(10, withBuffers);
 
-  // 2. Court — position derives purely from its real lat/lng vs current map center
+  // Court position derives purely from its real lat/lng vs current map center
   const courtOffset = latLngToScreenOffset(state.courtLat, state.courtLng);
   const cx = W / 2 + courtOffset.x;
   const cy = H / 2 + courtOffset.y;
+
+  // Torrance noise ordinance setback — a 250ft radius circle centered on the
+  // court, drawn BEFORE the court itself so the court renders on top of it.
+  if (showSetback) {
+    const setbackRadiusFt = 250;
+    const setbackRadiusPx = (setbackRadiusFt * FTM) / mpp;
+    mctx.save();
+    mctx.translate(cx, cy);
+    mctx.beginPath();
+    mctx.arc(0, 0, setbackRadiusPx, 0, Math.PI * 2);
+    mctx.fillStyle = 'rgba(220, 38, 38, 0.10)';
+    mctx.fill();
+    mctx.strokeStyle = 'rgba(220, 38, 38, 0.85)';
+    mctx.lineWidth = 2;
+    mctx.setLineDash([10, 7]);
+    mctx.stroke();
+    mctx.setLineDash([]);
+    mctx.restore();
+  }
 
   mctx.save();
   mctx.translate(cx, cy);
@@ -510,7 +537,7 @@ function redraw() {
   mctx.globalAlpha = 1;
   mctx.restore();
 
-  // 3. Address marker — same coordinate math, drawn last so it's always on top
+  // Address marker — same coordinate math, drawn last so it's always on top
   const markerOffset = latLngToScreenOffset(state.addrLat, state.addrLng);
   drawMarker(mctx, W / 2 + markerOffset.x, H / 2 + markerOffset.y);
 }
