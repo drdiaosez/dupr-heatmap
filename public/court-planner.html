@@ -34,6 +34,10 @@
   .info { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid #eee; align-items: center; }
   .badge { font-size: 12px; padding: 3px 10px; border-radius: 6px; background: #e6f1fb; color: #185fa5; }
   .badge.tip { background: #faeeda; color: #854f0b; }
+  .badge.marker-legend { background: #fbe9e9; color: #a02020; }
+  .lock-btn { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 8px; background: white; font-size: 13px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+  .lock-btn:hover { background: #f0f0ee; }
+  .lock-btn.locked { background: #fbe9e9; border-color: #d98c8c; color: #a02020; font-weight: 500; }
   .attr { position: absolute; bottom: 6px; right: 8px; font-size: 11px; color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
   .hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.45); padding: 4px 12px; border-radius: 20px; pointer-events: none; white-space: nowrap; transition: opacity 0.4s; }
 </style>
@@ -76,9 +80,13 @@
       <label>Court opacity <span id="opacity-val">75%</span></label>
       <input type="range" id="opacity" min="20" max="100" step="5" value="75" oninput="redraw()" />
     </div>
+    <div class="ctrl-full">
+      <button id="lock-btn" class="lock-btn" onclick="toggleLock()">🔓 Lock court to map</button>
+    </div>
     <div class="info">
       <span class="badge" id="dims-badge">Standard — 44' × 20'</span>
       <span class="badge tip">Drag the map to pan · Zoom 19–20 works best</span>
+      <span class="badge marker-legend">📍 marks the searched address</span>
     </div>
   </div>
 </div>
@@ -87,6 +95,10 @@
 let lat = null, lng = null, zoom = 19;
 // mapOffset tracks how many pixels the map has been dragged from its initial center
 let mapOffsetX = 0, mapOffsetY = 0;
+// courtOffset tracks how far the court has moved from screen-center.
+// Stays at 0,0 when unlocked (court fixed on screen); moves with the map when locked.
+let courtOffsetX = 0, courtOffsetY = 0;
+let locked = false;
 let isDragging = false, dragStartX = 0, dragStartY = 0, dragStartOffX = 0, dragStartOffY = 0;
 let mapCanvas = null, mctx = null;
 let lastTileParams = null;
@@ -193,6 +205,8 @@ async function loadMap() {
     zoom = parseInt(document.getElementById('zoom').value);
     mapOffsetX = 0;
     mapOffsetY = 0;
+    courtOffsetX = 0;
+    courtOffsetY = 0;
     renderTiles();
     const hint = document.getElementById('hint');
     hint.style.display = 'block';
@@ -313,9 +327,9 @@ function redraw() {
 
   const courtC = buildCourtCanvas(10, withBuffers);
 
-  // Court stays fixed at center of viewport; map pans beneath it
-  const cx = W / 2;
-  const cy = H / 2;
+  // Court position: fixed at screen-center when unlocked, or follows the map pan when locked
+  const cx = W / 2 + courtOffsetX;
+  const cy = H / 2 + courtOffsetY;
 
   ctx.save();
   ctx.translate(cx, cy);
@@ -324,6 +338,63 @@ function redraw() {
   ctx.drawImage(courtC, -drawW / 2, -drawH / 2, drawW, drawH);
   ctx.globalAlpha = 1;
   ctx.restore();
+
+  // Draw a marker pin at the original searched address.
+  // The address is always at the original map center, so its screen position
+  // is just the map's pan offset relative to viewport center.
+  const markerX = W / 2 + mapOffsetX;
+  const markerY = H / 2 + mapOffsetY;
+  drawMarker(ctx, markerX, markerY);
+}
+
+function drawMarker(ctx, x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+  // Pin shadow
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 5, 2.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fill();
+  // Pin body (teardrop)
+  ctx.beginPath();
+  ctx.arc(0, -14, 8, 0, Math.PI * 2);
+  ctx.fillStyle = '#e03131';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-6, -9);
+  ctx.lineTo(0, 1);
+  ctx.lineTo(6, -9);
+  ctx.closePath();
+  ctx.fillStyle = '#e03131';
+  ctx.fill();
+  // White outline
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'white';
+  ctx.beginPath();
+  ctx.arc(0, -14, 8, 0, Math.PI * 2);
+  ctx.stroke();
+  // Inner dot
+  ctx.beginPath();
+  ctx.arc(0, -14, 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'white';
+  ctx.fill();
+  ctx.restore();
+}
+
+function toggleLock() {
+  locked = !locked;
+  const btn = document.getElementById('lock-btn');
+  if (locked) {
+    // Snap court offset to current map offset so it doesn't jump
+    courtOffsetX = mapOffsetX;
+    courtOffsetY = mapOffsetY;
+    btn.textContent = '🔒 Court locked to map';
+    btn.classList.add('locked');
+  } else {
+    btn.textContent = '🔓 Lock court to map';
+    btn.classList.remove('locked');
+  }
+  redraw();
 }
 
 function onZoom(z) {
@@ -350,8 +421,18 @@ function onZoom(z) {
   lat = newLat;
   lng = newLng;
 
+  const oldZoom = zoom;
   zoom = parseInt(z);
   document.getElementById('zoom-val').textContent = z;
+
+  // Rescale the court's pixel offset (if locked) to match the new zoom level,
+  // so the court stays over the same ground location rather than the same screen position.
+  if (locked) {
+    const scaleFactor = Math.pow(2, zoom - oldZoom);
+    courtOffsetX = courtOffsetX * scaleFactor;
+    courtOffsetY = courtOffsetY * scaleFactor;
+  }
+
   mapOffsetX = 0;
   mapOffsetY = 0;
   renderTiles();
@@ -375,6 +456,10 @@ window.addEventListener('mousemove', e => {
   if (!isDragging) return;
   mapOffsetX = dragStartOffX + (e.clientX - dragStartX);
   mapOffsetY = dragStartOffY + (e.clientY - dragStartY);
+  if (locked) {
+    courtOffsetX = mapOffsetX;
+    courtOffsetY = mapOffsetY;
+  }
   applyMapOffset();
   redraw();
 });
@@ -399,6 +484,10 @@ window.addEventListener('touchmove', e => {
   if (!isDragging || e.touches.length !== 1) return;
   mapOffsetX = dragStartOffX + (e.touches[0].clientX - dragStartX);
   mapOffsetY = dragStartOffY + (e.touches[0].clientY - dragStartY);
+  if (locked) {
+    courtOffsetX = mapOffsetX;
+    courtOffsetY = mapOffsetY;
+  }
   applyMapOffset();
   redraw();
   e.preventDefault();
