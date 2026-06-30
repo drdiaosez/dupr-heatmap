@@ -20,7 +20,6 @@
   #map-wrap.dragging { cursor: grabbing; }
   #map-wrap.draggable { cursor: grab; }
   #map { width: 100%; height: 500px; }
-  #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
   .placeholder { display: flex; align-items: center; justify-content: center; height: 500px; flex-direction: column; gap: 12px; color: #999; }
   .placeholder svg { width: 48px; height: 48px; opacity: 0.4; }
   .placeholder p { font-size: 14px; }
@@ -61,7 +60,6 @@
       <p>Enter an address above to get started</p>
     </div>
     <div id="map" style="display:none;"></div>
-    <canvas id="overlay" style="display:none;"></canvas>
     <div class="attr" id="attr" style="display:none;">© Esri, Maxar, Earthstar Geographics</div>
     <div class="hint" id="hint" style="display:none;">Drag to pan map</div>
   </div>
@@ -131,7 +129,6 @@ let mapCenterLat = null, mapCenterLng = null;
 let isDragging = false, dragStartX = 0, dragStartY = 0;
 let dragStartCenterLat = 0, dragStartCenterLng = 0;
 let mctx = null;
-let lastTileParams = null;
 
 function metersPerPx(lat, z) {
   return (156543.03392 * Math.cos(lat * Math.PI / 180)) / Math.pow(2, z);
@@ -374,96 +371,116 @@ async function loadMap() {
   }
 }
 
-// Cheaply shift the already-loaded tile canvas via CSS transform, based on
-// how far mapCenter has moved (in pixels at the tile canvas's original zoom)
-// since it was rendered. Avoids re-fetching tiles on every drag frame.
-function repositionMapCanvas() {
-  if (!mapCanvasEl || tileRenderCenterLat === null) return;
-  const mpp = metersPerPx(tileRenderCenterLat, tileRenderZoom);
-  const dLatMeters = (tileRenderCenterLat - mapCenterLat) * METERS_PER_DEG_LAT;
-  const dLngMeters = (mapCenterLng - tileRenderCenterLng) * metersPerDegLng(tileRenderCenterLat);
-  const dxPx = dLngMeters / mpp;
-  const dyPx = dLatMeters / mpp;
-  mapCanvasEl.style.transform = `translate(${-dxPx}px, ${-dyPx}px)`;
+let mapCanvasEl = null; // the persistent <canvas> holding both tiles and overlay, drawn fresh every frame
+
+// Cache of loaded tile Image objects, keyed by "z/y/x", so we can redraw them
+// at new screen positions on every frame without re-fetching from the network.
+const tileImageCache = {};
+let currentTileSet = null; // { zoom, stx, sty, nx, ny, TS } describing which tiles are currently cached/visible
+
+function ensureTilesLoaded(onAnyNewTileLoaded) {
+  if (state.addrLat === null) return;
+  const wrap = document.getElementById('map-wrap');
+  const W = wrap.offsetWidth, H = 500;
+  const TS = 256;
+  const ct = latLngToTile(mapCenterLat, mapCenterLng, state.zoom);
+
+  // Load a generous margin of tiles around the current center so dragging
+  // doesn't immediately reveal blank edges before the next reload.
+  const nx = Math.ceil(W / TS) + 6;
+  const ny = Math.ceil(H / TS) + 6;
+  const stx = ct.x - Math.floor(nx / 2);
+  const sty = ct.y - Math.floor(ny / 2);
+
+  currentTileSet = { zoom: state.zoom, stx, sty, nx, ny, TS };
+
+  for (let tx = 0; tx < nx; tx++) {
+    for (let ty = 0; ty < ny; ty++) {
+      const tileX = stx + tx, tileY = sty + ty;
+      const key = `${state.zoom}/${tileY}/${tileX}`;
+      if (tileImageCache[key]) continue; // already loaded or loading
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.loaded = false;
+      tileImageCache[key] = img;
+      img.onload = () => { img.loaded = true; if (onAnyNewTileLoaded) onAnyNewTileLoaded(); };
+      img.onerror = () => { /* leave unloaded; redraw will just skip it */ };
+      img.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${state.zoom}/${tileY}/${tileX}`;
+    }
+  }
 }
 
-let mapCanvasEl = null; // the persistent <canvas> holding loaded satellite tiles
-let tileRenderCenterLat = null, tileRenderCenterLng = null, tileRenderZoom = null; // ground point + zoom the current tile canvas was rendered for
+// Draw all currently-cached tiles for the active tile set onto the map canvas,
+// positioned fresh from the CURRENT mapCenterLat/Lng every call. This is the
+// single source of truth for tile placement — no CSS transform involved.
+function drawTiles(ctx, W, H) {
+  if (!currentTileSet) return;
+  const { zoom, stx, sty, nx, ny, TS } = currentTileSet;
+  const ct = latLngToTile(mapCenterLat, mapCenterLng, zoom);
+  const tl = tileTopLeft(ct.x, ct.y, zoom);
+  const tlNext = tileTopLeft(ct.x + 1, ct.y + 1, zoom);
+  const lngPerTile = tlNext.lng - tl.lng;
+  const latPerTile = tl.lat - tlNext.lat;
+  const pxOffX = ((mapCenterLng - tl.lng) / lngPerTile) * TS;
+  const pxOffY = ((tl.lat - mapCenterLat) / latPerTile) * TS;
+  const originX = W / 2 - pxOffX - (ct.x - stx) * TS;
+  const originY = H / 2 - pxOffY - (ct.y - sty) * TS;
+
+  for (let tx = 0; tx < nx; tx++) {
+    for (let ty = 0; ty < ny; ty++) {
+      const tileX = stx + tx, tileY = sty + ty;
+      const key = `${zoom}/${tileY}/${tileX}`;
+      const img = tileImageCache[key];
+      if (!img || !img.loaded) continue;
+      const px = Math.round(originX + tx * TS);
+      const py = Math.round(originY + ty * TS);
+      ctx.drawImage(img, px, py, TS, TS);
+    }
+  }
+}
 
 function renderTiles() {
   if (state.addrLat === null) return;
   const wrap = document.getElementById('map-wrap');
   const mapDiv = document.getElementById('map');
-  const overlayCanvas = document.getElementById('overlay');
   const W = wrap.offsetWidth;
   const H = 500;
 
   document.getElementById('placeholder').style.display = 'none';
   mapDiv.style.display = 'block';
-  overlayCanvas.style.display = 'block';
   document.getElementById('attr').style.display = 'block';
   wrap.classList.add('draggable');
 
   mapDiv.style.width = W + 'px';
   mapDiv.style.height = H + 'px';
-  overlayCanvas.width = W;
-  overlayCanvas.height = H;
-  overlayCanvas.style.width = W + 'px';
-  overlayCanvas.style.height = H + 'px';
 
-  mapDiv.innerHTML = '';
-  mapCanvasEl = document.createElement('canvas');
-  mapCanvasEl.width = W; mapCanvasEl.height = H;
-  mapCanvasEl.style.cssText = `width:${W}px;height:${H}px;display:block;`;
-  mapDiv.appendChild(mapCanvasEl);
-  mctx = mapCanvasEl.getContext('2d');
-
-  // Remember exactly what ground point + zoom this tile canvas represents,
-  // so cheap pan-repositioning during drag knows how to translate it.
-  tileRenderCenterLat = mapCenterLat;
-  tileRenderCenterLng = mapCenterLng;
-  tileRenderZoom = state.zoom;
-
-  const TS = 256;
-  const ct = latLngToTile(mapCenterLat, mapCenterLng, state.zoom);
-  const tl = tileTopLeft(ct.x, ct.y, state.zoom);
-  const tlNext = tileTopLeft(ct.x + 1, ct.y + 1, state.zoom);
-  const lngPerTile = tlNext.lng - tl.lng;
-  const latPerTile = tl.lat - tlNext.lat;
-  const pxOffX = ((mapCenterLng - tl.lng) / lngPerTile) * TS;
-  const pxOffY = ((tl.lat - mapCenterLat) / latPerTile) * TS;
-
-  const nx = Math.ceil(W / TS) + 5;
-  const ny = Math.ceil(H / TS) + 5;
-  const stx = ct.x - Math.floor(nx / 2);
-  const sty = ct.y - Math.floor(ny / 2);
-  const originX = W / 2 - pxOffX - Math.floor(nx / 2) * TS;
-  const originY = H / 2 - pxOffY - Math.floor(ny / 2) * TS;
-
-  lastTileParams = { TS, nx, ny, stx, sty, originX, originY, zoom: state.zoom };
-
-  let done = 0, total = nx * ny;
-  for (let tx = 0; tx < nx; tx++) {
-    for (let ty = 0; ty < ny; ty++) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      const px = Math.round(originX + tx * TS);
-      const py = Math.round(originY + ty * TS);
-      img.onload = () => { mctx.drawImage(img, px, py, TS, TS); done++; if (done === total) redraw(); };
-      img.onerror = () => { done++; if (done === total) redraw(); };
-      img.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${state.zoom}/${sty+ty}/${stx+tx}`;
-    }
+  // Single persistent canvas used for BOTH tiles and the court/marker overlay,
+  // so everything is drawn together in one coordinate space every frame —
+  // no separate CSS-transformed layer that could drift out of sync.
+  if (!mapCanvasEl) {
+    mapDiv.innerHTML = '';
+    mapCanvasEl = document.createElement('canvas');
+    mapCanvasEl.style.cssText = `display:block;`;
+    mapDiv.appendChild(mapCanvasEl);
+    mctx = mapCanvasEl.getContext('2d');
   }
+  mapCanvasEl.width = W; mapCanvasEl.height = H;
+  mapCanvasEl.style.width = W + 'px';
+  mapCanvasEl.style.height = H + 'px';
+
+  ensureTilesLoaded(redraw);
   redraw();
 }
 
 function redraw() {
-  if (state.addrLat === null) return;
+  if (state.addrLat === null || !mctx) return;
   const wrap = document.getElementById('map-wrap');
   const W = wrap.offsetWidth, H = 500;
-  const canvas = document.getElementById('overlay');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, W, H);
+  mctx.clearRect(0, 0, W, H);
+
+  // 1. Tiles — drawn fresh every frame from the current mapCenterLat/Lng,
+  //    using the exact same coordinate math as the court/marker below.
+  drawTiles(mctx, W, H);
 
   document.getElementById('zoom-val').textContent = state.zoom;
   document.getElementById('rot-val').textContent = state.rotation + '°';
@@ -480,22 +497,22 @@ function redraw() {
 
   const courtC = buildCourtCanvas(10, withBuffers);
 
-  // Court position derives purely from its real lat/lng vs current map center
+  // 2. Court — position derives purely from its real lat/lng vs current map center
   const courtOffset = latLngToScreenOffset(state.courtLat, state.courtLng);
   const cx = W / 2 + courtOffset.x;
   const cy = H / 2 + courtOffset.y;
 
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(state.rotation * Math.PI / 180);
-  ctx.globalAlpha = state.opacity / 100;
-  ctx.drawImage(courtC, -drawW / 2, -drawH / 2, drawW, drawH);
-  ctx.globalAlpha = 1;
-  ctx.restore();
+  mctx.save();
+  mctx.translate(cx, cy);
+  mctx.rotate(state.rotation * Math.PI / 180);
+  mctx.globalAlpha = state.opacity / 100;
+  mctx.drawImage(courtC, -drawW / 2, -drawH / 2, drawW, drawH);
+  mctx.globalAlpha = 1;
+  mctx.restore();
 
-  // Address marker derives purely from its real lat/lng vs current map center
+  // 3. Address marker — same coordinate math, drawn last so it's always on top
   const markerOffset = latLngToScreenOffset(state.addrLat, state.addrLng);
-  drawMarker(ctx, W / 2 + markerOffset.x, H / 2 + markerOffset.y);
+  drawMarker(mctx, W / 2 + markerOffset.x, H / 2 + markerOffset.y);
 }
 
 // ============================================================================
@@ -603,7 +620,11 @@ function handleDragMove(clientX, clientY) {
   mapCenterLat = newCenterLat;
   mapCenterLng = newCenterLng;
 
-  repositionMapCanvas();
+  // If we've panned far enough that we might be nearing the edge of the
+  // currently-loaded tile set, queue up loading more tiles for the new area.
+  // This is cheap to call repeatedly since ensureTilesLoaded skips tiles
+  // that are already cached or in-flight.
+  ensureTilesLoaded(redraw);
   redraw();
 }
 
@@ -616,7 +637,7 @@ window.addEventListener('mouseup', () => {
   if (isDragging) {
     isDragging = false;
     wrap.classList.remove('dragging');
-    renderTiles(); // fetch fresh tiles for the new viewport now that dragging stopped
+    ensureTilesLoaded(redraw); // top off any tiles needed for the final position
     updateURL();
   }
 });
@@ -640,7 +661,7 @@ window.addEventListener('touchmove', e => {
 window.addEventListener('touchend', () => {
   if (isDragging) {
     isDragging = false;
-    renderTiles();
+    ensureTilesLoaded(redraw);
     updateURL();
   }
 });
