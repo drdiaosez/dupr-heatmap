@@ -99,6 +99,11 @@ let mapOffsetX = 0, mapOffsetY = 0;
 // Stays at 0,0 when unlocked (court fixed on screen); moves with the map when locked.
 let courtOffsetX = 0, courtOffsetY = 0;
 let locked = false;
+// Anchors captured at the moment locking is engaged, so we can compute how far
+// the map has moved SINCE locking and apply that same delta to the court,
+// instead of confusing the court's offset with the map's raw offset.
+let lockBaseMapOffsetX = 0, lockBaseMapOffsetY = 0;
+let lockBaseCourtOffsetX = 0, lockBaseCourtOffsetY = 0;
 let isDragging = false, dragStartX = 0, dragStartY = 0, dragStartOffX = 0, dragStartOffY = 0;
 let mapCanvas = null, mctx = null;
 let lastTileParams = null;
@@ -207,6 +212,10 @@ async function loadMap() {
     mapOffsetY = 0;
     courtOffsetX = 0;
     courtOffsetY = 0;
+    lockBaseMapOffsetX = 0;
+    lockBaseMapOffsetY = 0;
+    lockBaseCourtOffsetX = 0;
+    lockBaseCourtOffsetY = 0;
     renderTiles();
     const hint = document.getElementById('hint');
     hint.style.display = 'block';
@@ -391,6 +400,12 @@ function toggleLock() {
     // not to the map's pan offset.
     courtOffsetX = 0;
     courtOffsetY = 0;
+    // Remember the map's offset and the court's offset at this exact moment,
+    // so future drags can apply the same delta to both instead of conflating them.
+    lockBaseMapOffsetX = mapOffsetX;
+    lockBaseMapOffsetY = mapOffsetY;
+    lockBaseCourtOffsetX = 0;
+    lockBaseCourtOffsetY = 0;
     btn.textContent = '🔒 Court locked to map';
     btn.classList.add('locked');
   } else {
@@ -438,6 +453,12 @@ function onZoom(z) {
     const scaleFactor = Math.pow(2, zoom - oldZoom);
     courtOffsetX = courtOffsetX * scaleFactor;
     courtOffsetY = courtOffsetY * scaleFactor;
+    // mapOffset is about to reset to 0 below, so re-anchor the lock base
+    // to the new (0,0) map offset and the just-rescaled court offset.
+    lockBaseMapOffsetX = 0;
+    lockBaseMapOffsetY = 0;
+    lockBaseCourtOffsetX = courtOffsetX;
+    lockBaseCourtOffsetY = courtOffsetY;
   }
 
   mapOffsetX = 0;
@@ -464,8 +485,8 @@ window.addEventListener('mousemove', e => {
   mapOffsetX = dragStartOffX + (e.clientX - dragStartX);
   mapOffsetY = dragStartOffY + (e.clientY - dragStartY);
   if (locked) {
-    courtOffsetX = mapOffsetX;
-    courtOffsetY = mapOffsetY;
+    courtOffsetX = lockBaseCourtOffsetX + (mapOffsetX - lockBaseMapOffsetX);
+    courtOffsetY = lockBaseCourtOffsetY + (mapOffsetY - lockBaseMapOffsetY);
   }
   applyMapOffset();
   redraw();
@@ -492,8 +513,8 @@ window.addEventListener('touchmove', e => {
   mapOffsetX = dragStartOffX + (e.touches[0].clientX - dragStartX);
   mapOffsetY = dragStartOffY + (e.touches[0].clientY - dragStartY);
   if (locked) {
-    courtOffsetX = mapOffsetX;
-    courtOffsetY = mapOffsetY;
+    courtOffsetX = lockBaseCourtOffsetX + (mapOffsetX - lockBaseMapOffsetX);
+    courtOffsetY = lockBaseCourtOffsetY + (mapOffsetY - lockBaseMapOffsetY);
   }
   applyMapOffset();
   redraw();
