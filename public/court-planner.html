@@ -95,7 +95,7 @@
       <span class="badge" id="dims-badge">Standard — 44' × 20'</span>
       <span class="badge tip">Drag the map to pan · Zoom 19–20 works best</span>
       <span class="badge marker-legend">📍 anchor — drag to reposition</span>
-      <span class="badge setback-legend" id="setback-legend" style="display:none;">⭕ 250ft Torrance noise ordinance setback from residential structures</span>
+      <span class="badge setback-legend" id="setback-legend" style="display:none;">⭕ 250ft Torrance noise ordinance setback centered on court</span>
     </div>
   </div>
   <div class="share-row" id="share-row" style="display:none;">
@@ -538,12 +538,12 @@ function redraw() {
   const anchorY = H / 2 + anchorOffset.y;
 
   // Torrance noise ordinance setback — a 250ft radius circle centered on the
-  // ANCHOR (the residential structure), drawn BEFORE the court so court renders on top.
+  // COURT, drawn BEFORE the court so court renders on top.
   if (showSetback) {
     const setbackRadiusFt = 250;
     const setbackRadiusPx = (setbackRadiusFt * FTM) / mpp;
     mctx.save();
-    mctx.translate(anchorX, anchorY);
+    mctx.translate(cx, cy);
     mctx.beginPath();
     mctx.arc(0, 0, setbackRadiusPx, 0, Math.PI * 2);
     mctx.fillStyle = 'rgba(220, 38, 38, 0.10)';
