@@ -374,6 +374,22 @@ async function loadMap() {
   }
 }
 
+// Cheaply shift the already-loaded tile canvas via CSS transform, based on
+// how far mapCenter has moved (in pixels at the tile canvas's original zoom)
+// since it was rendered. Avoids re-fetching tiles on every drag frame.
+function repositionMapCanvas() {
+  if (!mapCanvasEl || tileRenderCenterLat === null) return;
+  const mpp = metersPerPx(tileRenderCenterLat, tileRenderZoom);
+  const dLatMeters = (tileRenderCenterLat - mapCenterLat) * METERS_PER_DEG_LAT;
+  const dLngMeters = (mapCenterLng - tileRenderCenterLng) * metersPerDegLng(tileRenderCenterLat);
+  const dxPx = dLngMeters / mpp;
+  const dyPx = dLatMeters / mpp;
+  mapCanvasEl.style.transform = `translate(${-dxPx}px, ${-dyPx}px)`;
+}
+
+let mapCanvasEl = null; // the persistent <canvas> holding loaded satellite tiles
+let tileRenderCenterLat = null, tileRenderCenterLng = null, tileRenderZoom = null; // ground point + zoom the current tile canvas was rendered for
+
 function renderTiles() {
   if (state.addrLat === null) return;
   const wrap = document.getElementById('map-wrap');
@@ -396,11 +412,17 @@ function renderTiles() {
   overlayCanvas.style.height = H + 'px';
 
   mapDiv.innerHTML = '';
-  const mapCanvas = document.createElement('canvas');
-  mapCanvas.width = W; mapCanvas.height = H;
-  mapCanvas.style.cssText = `width:${W}px;height:${H}px;display:block;`;
-  mapDiv.appendChild(mapCanvas);
-  mctx = mapCanvas.getContext('2d');
+  mapCanvasEl = document.createElement('canvas');
+  mapCanvasEl.width = W; mapCanvasEl.height = H;
+  mapCanvasEl.style.cssText = `width:${W}px;height:${H}px;display:block;`;
+  mapDiv.appendChild(mapCanvasEl);
+  mctx = mapCanvasEl.getContext('2d');
+
+  // Remember exactly what ground point + zoom this tile canvas represents,
+  // so cheap pan-repositioning during drag knows how to translate it.
+  tileRenderCenterLat = mapCenterLat;
+  tileRenderCenterLng = mapCenterLng;
+  tileRenderZoom = state.zoom;
 
   const TS = 256;
   const ct = latLngToTile(mapCenterLat, mapCenterLng, state.zoom);
@@ -581,7 +603,8 @@ function handleDragMove(clientX, clientY) {
   mapCenterLat = newCenterLat;
   mapCenterLng = newCenterLng;
 
-  renderTiles();
+  repositionMapCanvas();
+  redraw();
 }
 
 window.addEventListener('mousemove', e => {
@@ -593,6 +616,7 @@ window.addEventListener('mouseup', () => {
   if (isDragging) {
     isDragging = false;
     wrap.classList.remove('dragging');
+    renderTiles(); // fetch fresh tiles for the new viewport now that dragging stopped
     updateURL();
   }
 });
@@ -616,6 +640,7 @@ window.addEventListener('touchmove', e => {
 window.addEventListener('touchend', () => {
   if (isDragging) {
     isDragging = false;
+    renderTiles();
     updateURL();
   }
 });
