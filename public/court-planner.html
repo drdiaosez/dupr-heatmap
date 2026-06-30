@@ -70,7 +70,7 @@
       <select id="court-type" onchange="onCourtTypeChange()">
         <option value="standard">Standard — 44' × 20'</option>
         <option value="rec">Rec w/ buffers — 64' × 40'</option>
-        <option value="torrance">Torrance setback — 250 ft radius</option>
+        <option value="torrance">Torrance setback — 64' × 40' + 250ft radius</option>
       </select>
     </div>
     <div class="ctrl">
@@ -488,10 +488,10 @@ function redraw() {
   document.getElementById('zoom-val').textContent = state.zoom;
   document.getElementById('rot-val').textContent = state.rotation + '°';
   document.getElementById('opacity-val').textContent = state.opacity + '%';
-  const withBuffers = state.courtType === 'rec';
+  const withBuffers = state.courtType === 'rec' || state.courtType === 'torrance';
   const showSetback = state.courtType === 'torrance';
-  const dimsLabel = withBuffers ? "Rec w/ buffers — 64' × 40'"
-    : showSetback ? "Standard — 44' × 20' + 250ft setback"
+  const dimsLabel = showSetback ? "Rec w/ buffers — 64' × 40' + 250ft setback"
+    : withBuffers ? "Rec w/ buffers — 64' × 40'"
     : "Standard — 44' × 20'";
   document.getElementById('dims-badge').textContent = dimsLabel;
   document.getElementById('setback-legend').style.display = showSetback ? 'inline-block' : 'none';
