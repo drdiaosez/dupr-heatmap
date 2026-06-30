@@ -601,21 +601,20 @@ function handleDragMove(clientX, clientY) {
   const newCenterLng = dragStartCenterLng + dxMeters / metersPerDegLng(dragStartCenterLat);
   const newCenterLat = dragStartCenterLat - dyMeters / METERS_PER_DEG_LAT;
 
-  // If the court is locked to the map, move it by the same real-world delta
-  // as the map center, so it stays fixed in space (drags along with the ground).
-  if (state.locked) {
-    const centerDeltaLat = newCenterLat - mapCenterLat;
-    const centerDeltaLng = newCenterLng - mapCenterLng;
-    state.courtLat += centerDeltaLat;
-    state.courtLng += centerDeltaLng;
-  } else {
-    // Unlocked: the court should stay visually fixed at screen-center as the
-    // map pans beneath it. Since redraw() positions the court based on
-    // (courtLat,courtLng) relative to the NEW mapCenter, we need courtLat/Lng
-    // to track mapCenter exactly so its screen offset remains (0,0).
-    state.courtLat = newCenterLat;
-    state.courtLng = newCenterLng;
+  // LOCKED: the court is anchored to a real ground location, so its lat/lng
+  // must NOT change while panning — that's exactly what makes it scroll
+  // along with the satellite imagery instead of staying glued to the screen.
+  //
+  // UNLOCKED: the court should stay fixed at the same screen position while
+  // the map pans underneath it. Since redraw() always places the court at
+  // screen-offset = (courtLatLng - mapCenterLatLng), keeping that offset
+  // constant requires courtLat/Lng to move by the exact same delta as
+  // mapCenter on every frame.
+  if (!state.locked) {
+    state.courtLat += (newCenterLat - mapCenterLat);
+    state.courtLng += (newCenterLng - mapCenterLng);
   }
+  // (when locked, state.courtLat/Lng are intentionally left untouched)
 
   mapCenterLat = newCenterLat;
   mapCenterLng = newCenterLng;
