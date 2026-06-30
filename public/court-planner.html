@@ -40,6 +40,11 @@
   .lock-btn.locked { background: #fbe9e9; border-color: #d98c8c; color: #a02020; font-weight: 500; }
   .attr { position: absolute; bottom: 6px; right: 8px; font-size: 11px; color: rgba(255,255,255,0.8); background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
   .hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.45); padding: 4px 12px; border-radius: 20px; pointer-events: none; white-space: nowrap; transition: opacity 0.4s; }
+  .share-row { display: flex; gap: 8px; margin-top: 12px; }
+  .share-row input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; background: #f9f9f7; color: #555; }
+  .share-row button { padding: 8px 16px; border: 1px solid #ccc; border-radius: 8px; background: white; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .share-row button:hover { background: #f0f0ee; }
+  .share-row button.copied { background: #e6f7ec; border-color: #8fd6a8; color: #1a7a3e; }
 </style>
 </head>
 <body>
@@ -63,7 +68,7 @@
   <div class="controls">
     <div class="ctrl">
       <label>Court layout</label>
-      <select id="court-type" onchange="redraw()">
+      <select id="court-type" onchange="onCourtTypeChange()">
         <option value="standard">Standard — 44' × 20'</option>
         <option value="rec">Rec w/ buffers — 64' × 40'</option>
       </select>
@@ -74,11 +79,11 @@
     </div>
     <div class="ctrl ctrl-full">
       <label>Rotation <span id="rot-val">0°</span></label>
-      <input type="range" id="rot" min="0" max="359" step="1" value="0" oninput="redraw()" />
+      <input type="range" id="rot" min="0" max="359" step="1" value="0" oninput="onRotation(this.value)" />
     </div>
     <div class="ctrl ctrl-full">
       <label>Court opacity <span id="opacity-val">75%</span></label>
-      <input type="range" id="opacity" min="20" max="100" step="5" value="75" oninput="redraw()" />
+      <input type="range" id="opacity" min="20" max="100" step="5" value="75" oninput="onOpacity(this.value)" />
     </div>
     <div class="ctrl-full">
       <button id="lock-btn" class="lock-btn" onclick="toggleLock()">🔓 Lock court to map</button>
@@ -89,28 +94,137 @@
       <span class="badge marker-legend">📍 marks the searched address</span>
     </div>
   </div>
+  <div class="share-row" id="share-row" style="display:none;">
+    <input type="text" id="share-url" readonly />
+    <button id="share-btn" onclick="copyShareLink()">Copy link</button>
+  </div>
 </div>
 
 <script>
-let lat = null, lng = null, zoom = 19;
-// addrLat/addrLng hold the ORIGINAL searched address — set once per search and
-// never mutated afterward. lat/lng (above) represent whatever the map's tile
-// grid is currently centered on, which legitimately shifts on zoom changes.
-let addrLat = null, addrLng = null;
-// mapOffset tracks how many pixels the map has been dragged from its initial center
-let mapOffsetX = 0, mapOffsetY = 0;
-// courtOffset tracks how far the court has moved from screen-center.
-// Stays at 0,0 when unlocked (court fixed on screen); moves with the map when locked.
-let courtOffsetX = 0, courtOffsetY = 0;
-let locked = false;
-// Anchors captured at the moment locking is engaged, so we can compute how far
-// the map has moved SINCE locking and apply that same delta to the court,
-// instead of confusing the court's offset with the map's raw offset.
-let lockBaseMapOffsetX = 0, lockBaseMapOffsetY = 0;
-let lockBaseCourtOffsetX = 0, lockBaseCourtOffsetY = 0;
-let isDragging = false, dragStartX = 0, dragStartY = 0, dragStartOffX = 0, dragStartOffY = 0;
-let mapCanvas = null, mctx = null;
+// ============================================================================
+// STATE MODEL — everything lives in real-world units (lat/lng, degrees,
+// percentages) rather than screen pixels, so the entire state maps 1:1 onto
+// URL query parameters and survives reloads, sharing, and zoom changes
+// without any pixel-rescaling math.
+// ============================================================================
+
+const state = {
+  addrLat: null,    // the geocoded address — set once on search, never mutated
+  addrLng: null,
+  courtLat: null,   // the court's real-world center point
+  courtLng: null,
+  zoom: 19,
+  rotation: 0,      // degrees
+  opacity: 75,      // percent
+  courtType: 'standard', // 'standard' | 'rec'
+  locked: false,     // if true, the court is locked to the ground (courtLat/Lng moves with no extra logic needed — see below)
+  addrText: ''       // for display in the search box
+};
+
+// mapCenterLat/Lng is PURELY a rendering concern: which ground point is at the
+// center of the viewport right now. It changes as you drag (pan) the map.
+// It is NOT part of the shareable state — it's always derived as addrLat/Lng
+// plus whatever pan offset is currently active, and resets to courtLat/Lng-ish
+// view on load. We track it directly here for simplicity during a session.
+let mapCenterLat = null, mapCenterLng = null;
+
+let isDragging = false, dragStartX = 0, dragStartY = 0;
+let dragStartCenterLat = 0, dragStartCenterLng = 0;
+let mctx = null;
 let lastTileParams = null;
+
+function metersPerPx(lat, z) {
+  return (156543.03392 * Math.cos(lat * Math.PI / 180)) / Math.pow(2, z);
+}
+const METERS_PER_DEG_LAT = 111320;
+function metersPerDegLng(lat) { return 111320 * Math.cos(lat * Math.PI / 180); }
+
+// Convert a real lat/lng point into a pixel offset from the CURRENT map center.
+function latLngToScreenOffset(pLat, pLng) {
+  const mpp = metersPerPx(mapCenterLat, state.zoom);
+  const dx = (pLng - mapCenterLng) * metersPerDegLng(mapCenterLat);
+  const dy = (mapCenterLat - pLat) * METERS_PER_DEG_LAT; // screen-y grows downward as lat decreases
+  return { x: dx / mpp, y: dy / mpp };
+}
+
+// Convert a pixel offset from the current map center back into a real lat/lng.
+function screenOffsetToLatLng(dxPx, dyPx) {
+  const mpp = metersPerPx(mapCenterLat, state.zoom);
+  const dxMeters = dxPx * mpp;
+  const dyMeters = dyPx * mpp;
+  const newLng = mapCenterLng + dxMeters / metersPerDegLng(mapCenterLat);
+  const newLat = mapCenterLat - dyMeters / METERS_PER_DEG_LAT;
+  return { lat: newLat, lng: newLng };
+}
+
+// ============================================================================
+// URL STATE SYNC
+// ============================================================================
+
+function encodeStateToURL() {
+  const p = new URLSearchParams();
+  if (state.addrLat !== null) {
+    p.set('lat', state.addrLat.toFixed(7));
+    p.set('lng', state.addrLng.toFixed(7));
+  }
+  if (state.courtLat !== null) {
+    p.set('clat', state.courtLat.toFixed(7));
+    p.set('clng', state.courtLng.toFixed(7));
+  }
+  p.set('zoom', state.zoom);
+  p.set('rot', state.rotation);
+  p.set('op', state.opacity);
+  p.set('type', state.courtType);
+  p.set('locked', state.locked ? '1' : '0');
+  if (state.addrText) p.set('addr', state.addrText);
+  return p.toString();
+}
+
+function updateURL() {
+  const qs = encodeStateToURL();
+  const newUrl = `${window.location.pathname}?${qs}`;
+  window.history.replaceState(null, '', newUrl);
+  updateShareBox();
+}
+
+function updateShareBox() {
+  if (state.addrLat === null) return;
+  document.getElementById('share-row').style.display = 'flex';
+  document.getElementById('share-url').value = window.location.href;
+}
+
+function loadStateFromURL() {
+  const p = new URLSearchParams(window.location.search);
+  if (!p.has('lat') || !p.has('lng')) return false;
+  state.addrLat = parseFloat(p.get('lat'));
+  state.addrLng = parseFloat(p.get('lng'));
+  state.courtLat = p.has('clat') ? parseFloat(p.get('clat')) : state.addrLat;
+  state.courtLng = p.has('clng') ? parseFloat(p.get('clng')) : state.addrLng;
+  state.zoom = p.has('zoom') ? parseInt(p.get('zoom')) : 19;
+  state.rotation = p.has('rot') ? parseInt(p.get('rot')) : 0;
+  state.opacity = p.has('op') ? parseInt(p.get('op')) : 75;
+  state.courtType = p.has('type') ? p.get('type') : 'standard';
+  state.locked = p.get('locked') === '1';
+  state.addrText = p.has('addr') ? p.get('addr') : '';
+  return true;
+}
+
+function copyShareLink() {
+  const input = document.getElementById('share-url');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = document.getElementById('share-btn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy link'; btn.classList.remove('copied'); }, 1800);
+  }).catch(() => {
+    input.focus();
+  });
+}
+
+// ============================================================================
+// COURT RENDERING (unchanged geometry logic)
+// ============================================================================
 
 function buildCourtCanvas(scale, withBuffers) {
   const COURT_L = 44, COURT_W = 20, KITCHEN = 7;
@@ -137,27 +251,23 @@ function buildCourtCanvas(scale, withBuffers) {
   const ox = withBuffers ? p(BUF_SIDE) : 0;
   const oy = withBuffers ? p(BUF_END) : 0;
   const cW = p(COURT_W), cH = p(COURT_L);
-  const netY = oy + p(COURT_L / 2);          // net at 22' from each baseline
-  const kitchenTop = netY - p(KITCHEN);       // NVZ line: 7' above net (15' from top baseline)
-  const kitchenBot = netY + p(KITCHEN);       // NVZ line: 7' below net (15' from bottom baseline)
+  const netY = oy + p(COURT_L / 2);
+  const kitchenTop = netY - p(KITCHEN);
+  const kitchenBot = netY + p(KITCHEN);
   const midX = ox + p(COURT_W / 2);
 
-  // Base: fill entire court blue (service area color)
   ctx.fillStyle = '#3a7fd4';
   ctx.fillRect(ox, oy, cW, cH);
-
-  // Service area halves — alternating shades left/right
   ctx.fillStyle = '#2d6bbf';
-  ctx.fillRect(ox,    oy, p(COURT_W / 2), p(COURT_L / 2));      // top-left service
-  ctx.fillRect(midX,  netY, p(COURT_W / 2), p(COURT_L / 2));    // bottom-right service
+  ctx.fillRect(ox,    oy, p(COURT_W / 2), p(COURT_L / 2));
+  ctx.fillRect(midX,  netY, p(COURT_W / 2), p(COURT_L / 2));
   ctx.fillStyle = '#4a8fd6';
-  ctx.fillRect(midX,  oy, p(COURT_W / 2), p(COURT_L / 2));      // top-right service
-  ctx.fillRect(ox,    netY, p(COURT_W / 2), p(COURT_L / 2));    // bottom-left service
+  ctx.fillRect(midX,  oy, p(COURT_W / 2), p(COURT_L / 2));
+  ctx.fillRect(ox,    netY, p(COURT_W / 2), p(COURT_L / 2));
 
-  // Kitchen (NVZ) zones — red, 7' from net on each side, full width
   ctx.fillStyle = '#c94040';
-  ctx.fillRect(ox, kitchenTop, cW, p(KITCHEN));   // top kitchen (between kitchenTop and netY)
-  ctx.fillRect(ox, netY, cW, p(KITCHEN));          // bottom kitchen (between netY and kitchenBot)
+  ctx.fillRect(ox, kitchenTop, cW, p(KITCHEN));
+  ctx.fillRect(ox, netY, cW, p(KITCHEN));
 
   const lw = Math.max(1.5, scale * 0.15);
   ctx.strokeStyle = 'white';
@@ -165,10 +275,8 @@ function buildCourtCanvas(scale, withBuffers) {
   ctx.lineJoin = 'miter';
   ctx.setLineDash([]);
   ctx.strokeRect(ox + lw/2, oy + lw/2, cW - lw, cH - lw);
-  // NVZ lines (kitchen boundaries)
   ctx.beginPath(); ctx.moveTo(ox, kitchenTop); ctx.lineTo(ox + cW, kitchenTop); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(ox, kitchenBot); ctx.lineTo(ox + cW, kitchenBot); ctx.stroke();
-  // Centerline runs through service areas only (baseline to kitchen line)
   ctx.beginPath(); ctx.moveTo(midX, oy); ctx.lineTo(midX, kitchenTop); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(midX, kitchenBot); ctx.lineTo(midX, oy + cH); ctx.stroke();
 
@@ -182,9 +290,40 @@ function buildCourtCanvas(scale, withBuffers) {
   return c;
 }
 
-function metersPerPx(lat, z) {
-  return (156543.03392 * Math.cos(lat * Math.PI / 180)) / Math.pow(2, z);
+function drawMarker(ctx, x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 5, 2.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, -14, 8, 0, Math.PI * 2);
+  ctx.fillStyle = '#e03131';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-6, -9);
+  ctx.lineTo(0, 1);
+  ctx.lineTo(6, -9);
+  ctx.closePath();
+  ctx.fillStyle = '#e03131';
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'white';
+  ctx.beginPath();
+  ctx.arc(0, -14, 8, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, -14, 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'white';
+  ctx.fill();
+  ctx.restore();
 }
+
+// ============================================================================
+// TILE / MAP RENDERING
+// ============================================================================
+
 function latLngToTile(lat, lng, z) {
   return {
     x: Math.floor((lng + 180) / 360 * Math.pow(2, z)),
@@ -209,20 +348,20 @@ async function loadMap() {
     const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`, { headers: { 'Accept-Language': 'en' } });
     const d = await r.json();
     if (!d.length) { alert('Address not found — try a more specific address.'); return; }
-    lat = parseFloat(d[0].lat);
-    lng = parseFloat(d[0].lon);
-    addrLat = lat;
-    addrLng = lng;
-    zoom = parseInt(document.getElementById('zoom').value);
-    mapOffsetX = 0;
-    mapOffsetY = 0;
-    courtOffsetX = 0;
-    courtOffsetY = 0;
-    lockBaseMapOffsetX = 0;
-    lockBaseMapOffsetY = 0;
-    lockBaseCourtOffsetX = 0;
-    lockBaseCourtOffsetY = 0;
+    state.addrLat = parseFloat(d[0].lat);
+    state.addrLng = parseFloat(d[0].lon);
+    state.addrText = addr;
+    state.courtLat = state.addrLat;
+    state.courtLng = state.addrLng;
+    state.zoom = parseInt(document.getElementById('zoom').value);
+    state.rotation = 0;
+    state.opacity = 75;
+    state.locked = false;
+    setLockUI(false);
+    mapCenterLat = state.addrLat;
+    mapCenterLng = state.addrLng;
     renderTiles();
+    updateURL();
     const hint = document.getElementById('hint');
     hint.style.display = 'block';
     hint.style.opacity = '1';
@@ -236,7 +375,7 @@ async function loadMap() {
 }
 
 function renderTiles() {
-  if (lat === null) return;
+  if (state.addrLat === null) return;
   const wrap = document.getElementById('map-wrap');
   const mapDiv = document.getElementById('map');
   const overlayCanvas = document.getElementById('overlay');
@@ -257,83 +396,60 @@ function renderTiles() {
   overlayCanvas.style.height = H + 'px';
 
   mapDiv.innerHTML = '';
-  mapCanvas = document.createElement('canvas');
+  const mapCanvas = document.createElement('canvas');
   mapCanvas.width = W; mapCanvas.height = H;
   mapCanvas.style.cssText = `width:${W}px;height:${H}px;display:block;`;
   mapDiv.appendChild(mapCanvas);
   mctx = mapCanvas.getContext('2d');
 
   const TS = 256;
-  const ct = latLngToTile(lat, lng, zoom);
-  const tl = tileTopLeft(ct.x, ct.y, zoom);
-  const tlNext = tileTopLeft(ct.x + 1, ct.y + 1, zoom);
+  const ct = latLngToTile(mapCenterLat, mapCenterLng, state.zoom);
+  const tl = tileTopLeft(ct.x, ct.y, state.zoom);
+  const tlNext = tileTopLeft(ct.x + 1, ct.y + 1, state.zoom);
   const lngPerTile = tlNext.lng - tl.lng;
   const latPerTile = tl.lat - tlNext.lat;
-  const pxOffX = ((lng - tl.lng) / lngPerTile) * TS;
-  const pxOffY = ((tl.lat - lat) / latPerTile) * TS;
+  const pxOffX = ((mapCenterLng - tl.lng) / lngPerTile) * TS;
+  const pxOffY = ((tl.lat - mapCenterLat) / latPerTile) * TS;
 
-  // Use extra tiles so panning doesn't show blank edges
   const nx = Math.ceil(W / TS) + 5;
   const ny = Math.ceil(H / TS) + 5;
   const stx = ct.x - Math.floor(nx / 2);
   const sty = ct.y - Math.floor(ny / 2);
+  const originX = W / 2 - pxOffX - Math.floor(nx / 2) * TS;
+  const originY = H / 2 - pxOffY - Math.floor(ny / 2) * TS;
 
-  lastTileParams = { TS, nx, ny, stx, sty, originX: W / 2 - pxOffX - Math.floor(nx / 2) * TS, originY: H / 2 - pxOffY - Math.floor(ny / 2) * TS };
+  lastTileParams = { TS, nx, ny, stx, sty, originX, originY, zoom: state.zoom };
 
   let done = 0, total = nx * ny;
   for (let tx = 0; tx < nx; tx++) {
     for (let ty = 0; ty < ny; ty++) {
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      const px = Math.round(lastTileParams.originX + tx * TS);
-      const py = Math.round(lastTileParams.originY + ty * TS);
-      img.onload = () => { mctx.drawImage(img, px, py, TS, TS); done++; if (done === total) { applyMapOffset(); redraw(); } };
-      img.onerror = () => { done++; if (done === total) { applyMapOffset(); redraw(); } };
-      img.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${sty+ty}/${stx+tx}`;
+      const px = Math.round(originX + tx * TS);
+      const py = Math.round(originY + ty * TS);
+      img.onload = () => { mctx.drawImage(img, px, py, TS, TS); done++; if (done === total) redraw(); };
+      img.onerror = () => { done++; if (done === total) redraw(); };
+      img.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${state.zoom}/${sty+ty}/${stx+tx}`;
     }
   }
-
-  window._meta = { W, H, mpp: metersPerPx(lat, zoom) };
   redraw();
 }
 
-// Re-draw the tile layer shifted by mapOffset, then redraw the court overlay
-function applyMapOffset() {
-  if (!mctx || !lastTileParams) return;
-  const { W, H } = window._meta;
-  const { TS, nx, ny, stx, sty, originX, originY } = lastTileParams;
-  mctx.clearRect(0, 0, W, H);
-  // re-stamp tiles — we keep them in an offscreen buffer per tile
-  // Since tiles are already loaded we just redraw from the img cache via re-fetch (they're browser-cached)
-  for (let tx = 0; tx < nx; tx++) {
-    for (let ty = 0; ty < ny; ty++) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      const px = Math.round(originX + tx * TS + mapOffsetX);
-      const py = Math.round(originY + ty * TS + mapOffsetY);
-      img.onload = () => { mctx.drawImage(img, px, py, TS, TS); redraw(); };
-      img.src = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${sty+ty}/${stx+tx}`;
-    }
-  }
-}
-
 function redraw() {
-  const meta = window._meta;
-  if (!meta) return;
-  const { W, H, mpp } = meta;
+  if (state.addrLat === null) return;
+  const wrap = document.getElementById('map-wrap');
+  const W = wrap.offsetWidth, H = 500;
   const canvas = document.getElementById('overlay');
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
 
-  const type = document.getElementById('court-type').value;
-  const withBuffers = type === 'rec';
-  const rot = parseInt(document.getElementById('rot').value);
-  const opacity = parseInt(document.getElementById('opacity').value) / 100;
-
-  document.getElementById('rot-val').textContent = rot + '°';
-  document.getElementById('opacity-val').textContent = Math.round(opacity * 100) + '%';
+  document.getElementById('zoom-val').textContent = state.zoom;
+  document.getElementById('rot-val').textContent = state.rotation + '°';
+  document.getElementById('opacity-val').textContent = state.opacity + '%';
+  const withBuffers = state.courtType === 'rec';
   document.getElementById('dims-badge').textContent = withBuffers ? "Rec w/ buffers — 64' × 40'" : "Standard — 44' × 20'";
 
+  const mpp = metersPerPx(mapCenterLat, state.zoom);
   const FTM = 0.3048;
   const totalL_ft = withBuffers ? 64 : 44;
   const totalW_ft = withBuffers ? 40 : 20;
@@ -342,202 +458,188 @@ function redraw() {
 
   const courtC = buildCourtCanvas(10, withBuffers);
 
-  // Court position: fixed at screen-center when unlocked, or follows the map pan when locked
-  const cx = W / 2 + courtOffsetX;
-  const cy = H / 2 + courtOffsetY;
+  // Court position derives purely from its real lat/lng vs current map center
+  const courtOffset = latLngToScreenOffset(state.courtLat, state.courtLng);
+  const cx = W / 2 + courtOffset.x;
+  const cy = H / 2 + courtOffset.y;
 
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(rot * Math.PI / 180);
-  ctx.globalAlpha = opacity;
+  ctx.rotate(state.rotation * Math.PI / 180);
+  ctx.globalAlpha = state.opacity / 100;
   ctx.drawImage(courtC, -drawW / 2, -drawH / 2, drawW, drawH);
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // Draw a marker pin at the original searched address.
-  // Convert the address's real lat/lng into a screen offset from the map's
-  // current center (lat/lng), then add the current pan offset. This stays
-  // correct even after zoom changes shift what `lat/lng` (map center) points to.
-  const metersPerDegLat = 111320;
-  const metersPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
-  const addrDxMeters = (addrLng - lng) * metersPerDegLng;
-  const addrDyMeters = (lat - addrLat) * metersPerDegLat; // screen-y grows downward as lat decreases
-  const addrPxX = addrDxMeters / mpp;
-  const addrPxY = addrDyMeters / mpp;
-
-  const markerX = W / 2 + mapOffsetX + addrPxX;
-  const markerY = H / 2 + mapOffsetY + addrPxY;
-  drawMarker(ctx, markerX, markerY);
+  // Address marker derives purely from its real lat/lng vs current map center
+  const markerOffset = latLngToScreenOffset(state.addrLat, state.addrLng);
+  drawMarker(ctx, W / 2 + markerOffset.x, H / 2 + markerOffset.y);
 }
 
-function drawMarker(ctx, x, y) {
-  ctx.save();
-  ctx.translate(x, y);
-  // Pin shadow
-  ctx.beginPath();
-  ctx.ellipse(0, 2, 5, 2.5, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fill();
-  // Pin body (teardrop)
-  ctx.beginPath();
-  ctx.arc(0, -14, 8, 0, Math.PI * 2);
-  ctx.fillStyle = '#e03131';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(-6, -9);
-  ctx.lineTo(0, 1);
-  ctx.lineTo(6, -9);
-  ctx.closePath();
-  ctx.fillStyle = '#e03131';
-  ctx.fill();
-  // White outline
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = 'white';
-  ctx.beginPath();
-  ctx.arc(0, -14, 8, 0, Math.PI * 2);
-  ctx.stroke();
-  // Inner dot
-  ctx.beginPath();
-  ctx.arc(0, -14, 3, 0, Math.PI * 2);
-  ctx.fillStyle = 'white';
-  ctx.fill();
-  ctx.restore();
+// ============================================================================
+// CONTROL HANDLERS
+// ============================================================================
+
+function onCourtTypeChange() {
+  state.courtType = document.getElementById('court-type').value;
+  redraw();
+  updateURL();
 }
 
-function toggleLock() {
-  locked = !locked;
+function onRotation(v) {
+  state.rotation = parseInt(v);
+  redraw();
+  updateURL();
+}
+
+function onOpacity(v) {
+  state.opacity = parseInt(v);
+  redraw();
+  updateURL();
+}
+
+function setLockUI(locked) {
   const btn = document.getElementById('lock-btn');
   if (locked) {
-    // While unlocked the court is always drawn at screen-center (offset 0,0),
-    // regardless of how far the map has been panned. So locking should snap
-    // the court's offset to 0,0 — its actual current on-screen position —
-    // not to the map's pan offset.
-    courtOffsetX = 0;
-    courtOffsetY = 0;
-    // Remember the map's offset and the court's offset at this exact moment,
-    // so future drags can apply the same delta to both instead of conflating them.
-    lockBaseMapOffsetX = mapOffsetX;
-    lockBaseMapOffsetY = mapOffsetY;
-    lockBaseCourtOffsetX = 0;
-    lockBaseCourtOffsetY = 0;
     btn.textContent = '🔒 Court locked to map';
     btn.classList.add('locked');
   } else {
-    // Unlocking: snap the court back to screen-center, since that's where
-    // it's meant to sit whenever the court is not locked to the map.
-    courtOffsetX = 0;
-    courtOffsetY = 0;
     btn.textContent = '🔓 Lock court to map';
     btn.classList.remove('locked');
   }
-  redraw();
+}
+
+function toggleLock() {
+  state.locked = !state.locked;
+  setLockUI(state.locked);
+  updateURL();
 }
 
 function onZoom(z) {
-  if (lat === null) {
-    zoom = parseInt(z);
+  if (state.addrLat === null) {
+    state.zoom = parseInt(z);
     document.getElementById('zoom-val').textContent = z;
     return;
   }
-  // Figure out what ground location is currently under the court (screen center),
-  // accounting for how far the map has been dragged, BEFORE changing zoom.
-  const mpp = metersPerPx(lat, zoom);
-  const metersPerDegLat = 111320;
-  const metersPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
-
-  // Dragging the map right (positive mapOffsetX) shifts content right, meaning the
-  // ground point now at screen-center used to sit to the LEFT (west) of center.
-  //   -> newLng = lng - (mapOffsetX * mpp) / metersPerDegLng
-  // Dragging the map down (positive mapOffsetY) shifts content down, meaning the
-  // ground point now at screen-center used to sit ABOVE (north, higher lat) of center.
-  //   -> newLat = lat + (mapOffsetY * mpp) / metersPerDegLat
-  const newLng = lng - (mapOffsetX * mpp) / metersPerDegLng;
-  const newLat = lat + (mapOffsetY * mpp) / metersPerDegLat;
-
-  lat = newLat;
-  lng = newLng;
-
-  const oldZoom = zoom;
-  zoom = parseInt(z);
-  document.getElementById('zoom-val').textContent = z;
-
-  // Rescale the court's pixel offset (if locked) to match the new zoom level,
-  // so the court stays over the same ground location rather than the same screen position.
-  if (locked) {
-    const scaleFactor = Math.pow(2, zoom - oldZoom);
-    courtOffsetX = courtOffsetX * scaleFactor;
-    courtOffsetY = courtOffsetY * scaleFactor;
-    // mapOffset is about to reset to 0 below, so re-anchor the lock base
-    // to the new (0,0) map offset and the just-rescaled court offset.
-    lockBaseMapOffsetX = 0;
-    lockBaseMapOffsetY = 0;
-    lockBaseCourtOffsetX = courtOffsetX;
-    lockBaseCourtOffsetY = courtOffsetY;
-  }
-
-  mapOffsetX = 0;
-  mapOffsetY = 0;
+  state.zoom = parseInt(z);
   renderTiles();
+  updateURL();
 }
 
-// --- Drag to pan ---
+// ============================================================================
+// DRAG TO PAN — dragging always moves the map's real-world center.
+// If locked, the court's real lat/lng is shifted by the same real-world delta
+// so it stays fixed in space relative to the ground (i.e. moves with the map).
+// If unlocked, the court's lat/lng stays fixed while the map moves under it,
+// which visually keeps the court pinned to screen-center automatically
+// because redraw() always recomputes court screen position from courtLat/Lng
+// relative to the CURRENT mapCenter — so as mapCenter moves toward courtLat/Lng's
+// fixed point... wait: actually for "stays fixed on screen" we need the court's
+// lat/lng to move WITH the map too when unlocked, by the same delta as the
+// map center, so its on-screen offset from center stays constant relative to
+// where it currently sits. This is handled explicitly below.
+// ============================================================================
+
 const wrap = document.getElementById('map-wrap');
 
 wrap.addEventListener('mousedown', e => {
-  if (lat === null) return;
+  if (state.addrLat === null) return;
   isDragging = true;
   dragStartX = e.clientX;
   dragStartY = e.clientY;
-  dragStartOffX = mapOffsetX;
-  dragStartOffY = mapOffsetY;
+  dragStartCenterLat = mapCenterLat;
+  dragStartCenterLng = mapCenterLng;
   wrap.classList.add('dragging');
   e.preventDefault();
 });
 
+function handleDragMove(clientX, clientY) {
+  const dxPx = clientX - dragStartX;
+  const dyPx = clientY - dragStartY;
+  const mpp = metersPerPx(dragStartCenterLat, state.zoom);
+  const dxMeters = -dxPx * mpp; // dragging right moves map content right == center point shifts left (west)
+  const dyMeters = -dyPx * mpp;
+  const newCenterLng = dragStartCenterLng + dxMeters / metersPerDegLng(dragStartCenterLat);
+  const newCenterLat = dragStartCenterLat - dyMeters / METERS_PER_DEG_LAT;
+
+  // If the court is locked to the map, move it by the same real-world delta
+  // as the map center, so it stays fixed in space (drags along with the ground).
+  if (state.locked) {
+    const centerDeltaLat = newCenterLat - mapCenterLat;
+    const centerDeltaLng = newCenterLng - mapCenterLng;
+    state.courtLat += centerDeltaLat;
+    state.courtLng += centerDeltaLng;
+  } else {
+    // Unlocked: the court should stay visually fixed at screen-center as the
+    // map pans beneath it. Since redraw() positions the court based on
+    // (courtLat,courtLng) relative to the NEW mapCenter, we need courtLat/Lng
+    // to track mapCenter exactly so its screen offset remains (0,0).
+    state.courtLat = newCenterLat;
+    state.courtLng = newCenterLng;
+  }
+
+  mapCenterLat = newCenterLat;
+  mapCenterLng = newCenterLng;
+
+  renderTiles();
+}
+
 window.addEventListener('mousemove', e => {
   if (!isDragging) return;
-  mapOffsetX = dragStartOffX + (e.clientX - dragStartX);
-  mapOffsetY = dragStartOffY + (e.clientY - dragStartY);
-  if (locked) {
-    courtOffsetX = lockBaseCourtOffsetX + (mapOffsetX - lockBaseMapOffsetX);
-    courtOffsetY = lockBaseCourtOffsetY + (mapOffsetY - lockBaseMapOffsetY);
-  }
-  applyMapOffset();
-  redraw();
+  handleDragMove(e.clientX, e.clientY);
 });
 
 window.addEventListener('mouseup', () => {
-  isDragging = false;
-  wrap.classList.remove('dragging');
+  if (isDragging) {
+    isDragging = false;
+    wrap.classList.remove('dragging');
+    updateURL();
+  }
 });
 
-// Touch support
 wrap.addEventListener('touchstart', e => {
-  if (lat === null || e.touches.length !== 1) return;
+  if (state.addrLat === null || e.touches.length !== 1) return;
   isDragging = true;
   dragStartX = e.touches[0].clientX;
   dragStartY = e.touches[0].clientY;
-  dragStartOffX = mapOffsetX;
-  dragStartOffY = mapOffsetY;
+  dragStartCenterLat = mapCenterLat;
+  dragStartCenterLng = mapCenterLng;
   e.preventDefault();
 }, { passive: false });
 
 window.addEventListener('touchmove', e => {
   if (!isDragging || e.touches.length !== 1) return;
-  mapOffsetX = dragStartOffX + (e.touches[0].clientX - dragStartX);
-  mapOffsetY = dragStartOffY + (e.touches[0].clientY - dragStartY);
-  if (locked) {
-    courtOffsetX = lockBaseCourtOffsetX + (mapOffsetX - lockBaseMapOffsetX);
-    courtOffsetY = lockBaseCourtOffsetY + (mapOffsetY - lockBaseMapOffsetY);
-  }
-  applyMapOffset();
-  redraw();
+  handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
   e.preventDefault();
 }, { passive: false });
 
-window.addEventListener('touchend', () => { isDragging = false; });
+window.addEventListener('touchend', () => {
+  if (isDragging) {
+    isDragging = false;
+    updateURL();
+  }
+});
 
 document.getElementById('addr').addEventListener('keydown', e => { if (e.key === 'Enter') loadMap(); });
+
+// ============================================================================
+// INITIAL LOAD — restore from URL if present
+// ============================================================================
+
+(function init() {
+  if (loadStateFromURL()) {
+    document.getElementById('addr').value = state.addrText || '';
+    document.getElementById('zoom').value = state.zoom;
+    document.getElementById('rot').value = state.rotation;
+    document.getElementById('opacity').value = state.opacity;
+    document.getElementById('court-type').value = state.courtType;
+    setLockUI(state.locked);
+    mapCenterLat = state.addrLat;
+    mapCenterLng = state.addrLng;
+    renderTiles();
+    updateShareBox();
+  }
+})();
 </script>
 </body>
 </html>
