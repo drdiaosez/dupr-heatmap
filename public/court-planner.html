@@ -93,6 +93,10 @@
 
 <script>
 let lat = null, lng = null, zoom = 19;
+// addrLat/addrLng hold the ORIGINAL searched address — set once per search and
+// never mutated afterward. lat/lng (above) represent whatever the map's tile
+// grid is currently centered on, which legitimately shifts on zoom changes.
+let addrLat = null, addrLng = null;
 // mapOffset tracks how many pixels the map has been dragged from its initial center
 let mapOffsetX = 0, mapOffsetY = 0;
 // courtOffset tracks how far the court has moved from screen-center.
@@ -207,6 +211,8 @@ async function loadMap() {
     if (!d.length) { alert('Address not found — try a more specific address.'); return; }
     lat = parseFloat(d[0].lat);
     lng = parseFloat(d[0].lon);
+    addrLat = lat;
+    addrLng = lng;
     zoom = parseInt(document.getElementById('zoom').value);
     mapOffsetX = 0;
     mapOffsetY = 0;
@@ -349,10 +355,18 @@ function redraw() {
   ctx.restore();
 
   // Draw a marker pin at the original searched address.
-  // The address is always at the original map center, so its screen position
-  // is just the map's pan offset relative to viewport center.
-  const markerX = W / 2 + mapOffsetX;
-  const markerY = H / 2 + mapOffsetY;
+  // Convert the address's real lat/lng into a screen offset from the map's
+  // current center (lat/lng), then add the current pan offset. This stays
+  // correct even after zoom changes shift what `lat/lng` (map center) points to.
+  const metersPerDegLat = 111320;
+  const metersPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
+  const addrDxMeters = (addrLng - lng) * metersPerDegLng;
+  const addrDyMeters = (lat - addrLat) * metersPerDegLat; // screen-y grows downward as lat decreases
+  const addrPxX = addrDxMeters / mpp;
+  const addrPxY = addrDyMeters / mpp;
+
+  const markerX = W / 2 + mapOffsetX + addrPxX;
+  const markerY = H / 2 + mapOffsetY + addrPxY;
   drawMarker(ctx, markerX, markerY);
 }
 
