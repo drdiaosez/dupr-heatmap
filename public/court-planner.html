@@ -88,10 +88,13 @@
     <div class="ctrl-full">
       <button id="lock-btn" class="lock-btn" onclick="toggleLock()">🔓 Lock court to map</button>
     </div>
+    <div class="ctrl-full">
+      <button id="anchor-btn" class="lock-btn" onclick="toggleAnchorMode()">📍 Move anchor</button>
+    </div>
     <div class="info">
       <span class="badge" id="dims-badge">Standard — 44' × 20'</span>
       <span class="badge tip">Drag the map to pan · Zoom 19–20 works best</span>
-      <span class="badge marker-legend">📍 marks the searched address</span>
+      <span class="badge marker-legend">📍 anchor — drag to reposition</span>
       <span class="badge setback-legend" id="setback-legend" style="display:none;">⭕ 250ft Torrance noise ordinance setback from residential structures</span>
     </div>
   </div>
@@ -112,14 +115,17 @@
 const state = {
   addrLat: null,    // the geocoded address — set once on search, never mutated
   addrLng: null,
+  anchorLat: null,  // the movable red dot — starts at addrLat/Lng, freely repositionable
+  anchorLng: null,
   courtLat: null,   // the court's real-world center point
   courtLng: null,
   zoom: 19,
   rotation: 0,      // degrees
   opacity: 75,      // percent
-  courtType: 'standard', // 'standard' | 'rec'
-  locked: false,     // if true, the court is locked to the ground (courtLat/Lng moves with no extra logic needed — see below)
-  addrText: ''       // for display in the search box
+  courtType: 'standard', // 'standard' | 'rec' | 'torrance'
+  locked: false,    // if true, the court is locked to the ground
+  anchorMode: false, // if true, clicking/dragging moves the anchor instead of panning
+  addrText: ''      // for display in the search box
 };
 
 // mapCenterLat/Lng is PURELY a rendering concern: which ground point is at the
@@ -167,6 +173,13 @@ function encodeStateToURL() {
     p.set('lat', state.addrLat.toFixed(7));
     p.set('lng', state.addrLng.toFixed(7));
   }
+  if (state.anchorLat !== null) {
+    p.set('alat', state.anchorLat.toFixed(7));
+    p.set('alng', state.anchorLng.toFixed(7));
+    // Center the shared view on the anchor so the recipient sees it immediately
+    p.set('vlat', mapCenterLat.toFixed(7));
+    p.set('vlng', mapCenterLng.toFixed(7));
+  }
   if (state.courtLat !== null) {
     p.set('clat', state.courtLat.toFixed(7));
     p.set('clng', state.courtLng.toFixed(7));
@@ -198,6 +211,8 @@ function loadStateFromURL() {
   if (!p.has('lat') || !p.has('lng')) return false;
   state.addrLat = parseFloat(p.get('lat'));
   state.addrLng = parseFloat(p.get('lng'));
+  state.anchorLat = p.has('alat') ? parseFloat(p.get('alat')) : state.addrLat;
+  state.anchorLng = p.has('alng') ? parseFloat(p.get('alng')) : state.addrLng;
   state.courtLat = p.has('clat') ? parseFloat(p.get('clat')) : state.addrLat;
   state.courtLng = p.has('clng') ? parseFloat(p.get('clng')) : state.addrLng;
   state.zoom = p.has('zoom') ? parseInt(p.get('zoom')) : 19;
@@ -206,6 +221,9 @@ function loadStateFromURL() {
   state.courtType = p.has('type') ? p.get('type') : 'standard';
   state.locked = p.get('locked') === '1';
   state.addrText = p.has('addr') ? p.get('addr') : '';
+  // vlat/vlng preserves the exact viewport center when the link was copied
+  mapCenterLat = p.has('vlat') ? parseFloat(p.get('vlat')) : state.anchorLat;
+  mapCenterLng = p.has('vlng') ? parseFloat(p.get('vlng')) : state.anchorLng;
   return true;
 }
 
@@ -351,13 +369,17 @@ async function loadMap() {
     state.addrLat = parseFloat(d[0].lat);
     state.addrLng = parseFloat(d[0].lon);
     state.addrText = addr;
+    state.anchorLat = state.addrLat;
+    state.anchorLng = state.addrLng;
     state.courtLat = state.addrLat;
     state.courtLng = state.addrLng;
     state.zoom = parseInt(document.getElementById('zoom').value);
     state.rotation = 0;
     state.opacity = 75;
     state.locked = false;
+    state.anchorMode = false;
     setLockUI(false);
+    setAnchorModeUI(false);
     mapCenterLat = state.addrLat;
     mapCenterLng = state.addrLng;
     renderTiles();
@@ -510,13 +532,18 @@ function redraw() {
   const cx = W / 2 + courtOffset.x;
   const cy = H / 2 + courtOffset.y;
 
+  // Anchor screen position (the movable red dot)
+  const anchorOffset = latLngToScreenOffset(state.anchorLat, state.anchorLng);
+  const anchorX = W / 2 + anchorOffset.x;
+  const anchorY = H / 2 + anchorOffset.y;
+
   // Torrance noise ordinance setback — a 250ft radius circle centered on the
-  // court, drawn BEFORE the court itself so the court renders on top of it.
+  // ANCHOR (the residential structure), drawn BEFORE the court so court renders on top.
   if (showSetback) {
     const setbackRadiusFt = 250;
     const setbackRadiusPx = (setbackRadiusFt * FTM) / mpp;
     mctx.save();
-    mctx.translate(cx, cy);
+    mctx.translate(anchorX, anchorY);
     mctx.beginPath();
     mctx.arc(0, 0, setbackRadiusPx, 0, Math.PI * 2);
     mctx.fillStyle = 'rgba(220, 38, 38, 0.10)';
@@ -537,9 +564,22 @@ function redraw() {
   mctx.globalAlpha = 1;
   mctx.restore();
 
-  // Address marker — same coordinate math, drawn last so it's always on top
-  const markerOffset = latLngToScreenOffset(state.addrLat, state.addrLng);
-  drawMarker(mctx, W / 2 + markerOffset.x, H / 2 + markerOffset.y);
+  // Anchor marker — drawn last so it's always on top
+  drawMarker(mctx, anchorX, anchorY);
+
+  // If anchor mode is active, draw a pulsing ring hint around the anchor
+  if (state.anchorMode) {
+    mctx.save();
+    mctx.translate(anchorX, anchorY);
+    mctx.beginPath();
+    mctx.arc(0, -14, 16, 0, Math.PI * 2);
+    mctx.strokeStyle = 'rgba(220, 38, 38, 0.6)';
+    mctx.lineWidth = 2;
+    mctx.setLineDash([4, 4]);
+    mctx.stroke();
+    mctx.setLineDash([]);
+    mctx.restore();
+  }
 }
 
 // ============================================================================
@@ -562,6 +602,23 @@ function onOpacity(v) {
   state.opacity = parseInt(v);
   redraw();
   updateURL();
+}
+
+function setAnchorModeUI(active) {
+  const btn = document.getElementById('anchor-btn');
+  if (active) {
+    btn.textContent = '📍 Moving anchor — click map to place';
+    btn.classList.add('locked');
+  } else {
+    btn.textContent = '📍 Move anchor';
+    btn.classList.remove('locked');
+  }
+}
+
+function toggleAnchorMode() {
+  state.anchorMode = !state.anchorMode;
+  setAnchorModeUI(state.anchorMode);
+  redraw();
 }
 
 function setLockUI(locked) {
@@ -615,41 +672,44 @@ wrap.addEventListener('mousedown', e => {
   dragStartY = e.clientY;
   dragStartCenterLat = mapCenterLat;
   dragStartCenterLng = mapCenterLng;
-  wrap.classList.add('dragging');
+  if (!state.anchorMode) wrap.classList.add('dragging');
   e.preventDefault();
 });
 
 function handleDragMove(clientX, clientY) {
+  if (state.anchorMode) {
+    // In anchor mode, drag moves the anchor dot to the current cursor position.
+    // Convert the cursor's screen position (relative to viewport center) into lat/lng.
+    const wrap = document.getElementById('map-wrap');
+    const rect = wrap.getBoundingClientRect();
+    const dxPx = clientX - rect.left - wrap.offsetWidth / 2;
+    const dyPx = clientY - rect.top - 500 / 2;
+    const mpp = metersPerPx(mapCenterLat, state.zoom);
+    state.anchorLat = mapCenterLat - (dyPx * mpp) / METERS_PER_DEG_LAT;
+    state.anchorLng = mapCenterLng + (dxPx * mpp) / metersPerDegLng(mapCenterLat);
+    redraw();
+    return;
+  }
+
   const dxPx = clientX - dragStartX;
   const dyPx = clientY - dragStartY;
   const mpp = metersPerPx(dragStartCenterLat, state.zoom);
-  const dxMeters = -dxPx * mpp; // dragging right moves map content right == center point shifts left (west)
+  const dxMeters = -dxPx * mpp;
   const dyMeters = -dyPx * mpp;
   const newCenterLng = dragStartCenterLng + dxMeters / metersPerDegLng(dragStartCenterLat);
   const newCenterLat = dragStartCenterLat - dyMeters / METERS_PER_DEG_LAT;
 
   // LOCKED: the court is anchored to a real ground location, so its lat/lng
-  // must NOT change while panning — that's exactly what makes it scroll
-  // along with the satellite imagery instead of staying glued to the screen.
-  //
-  // UNLOCKED: the court should stay fixed at the same screen position while
-  // the map pans underneath it. Since redraw() always places the court at
-  // screen-offset = (courtLatLng - mapCenterLatLng), keeping that offset
-  // constant requires courtLat/Lng to move by the exact same delta as
-  // mapCenter on every frame.
+  // must NOT change while panning.
+  // UNLOCKED: the court stays fixed on screen, so its lat/lng tracks mapCenter.
   if (!state.locked) {
     state.courtLat += (newCenterLat - mapCenterLat);
     state.courtLng += (newCenterLng - mapCenterLng);
   }
-  // (when locked, state.courtLat/Lng are intentionally left untouched)
 
   mapCenterLat = newCenterLat;
   mapCenterLng = newCenterLng;
 
-  // If we've panned far enough that we might be nearing the edge of the
-  // currently-loaded tile set, queue up loading more tiles for the new area.
-  // This is cheap to call repeatedly since ensureTilesLoaded skips tiles
-  // that are already cached or in-flight.
   ensureTilesLoaded(redraw);
   redraw();
 }
@@ -663,7 +723,9 @@ window.addEventListener('mouseup', () => {
   if (isDragging) {
     isDragging = false;
     wrap.classList.remove('dragging');
-    ensureTilesLoaded(redraw); // top off any tiles needed for the final position
+    if (!state.anchorMode) {
+      ensureTilesLoaded(redraw);
+    }
     updateURL();
   }
 });
@@ -687,7 +749,7 @@ window.addEventListener('touchmove', e => {
 window.addEventListener('touchend', () => {
   if (isDragging) {
     isDragging = false;
-    ensureTilesLoaded(redraw);
+    if (!state.anchorMode) ensureTilesLoaded(redraw);
     updateURL();
   }
 });
@@ -706,8 +768,8 @@ document.getElementById('addr').addEventListener('keydown', e => { if (e.key ===
     document.getElementById('opacity').value = state.opacity;
     document.getElementById('court-type').value = state.courtType;
     setLockUI(state.locked);
-    mapCenterLat = state.addrLat;
-    mapCenterLng = state.addrLng;
+    setAnchorModeUI(false); // never restore anchor mode active from URL
+    // mapCenterLat/Lng already set by loadStateFromURL from vlat/vlng or anchorLat/Lng
     renderTiles();
     updateShareBox();
   }
