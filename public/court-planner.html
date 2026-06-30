@@ -338,18 +338,14 @@ function onZoom(z) {
   const metersPerDegLat = 111320;
   const metersPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
 
-  // Positive mapOffsetX means the map was dragged right, i.e. content moved right,
-  // which means the ground point now at screen-center used to be to the LEFT of
-  // the original center. So we subtract the offset (converted to meters) to find it.
   // Dragging the map right (positive mapOffsetX) shifts content right, meaning the
   // ground point now at screen-center used to sit to the LEFT (west) of center.
+  //   -> newLng = lng - (mapOffsetX * mpp) / metersPerDegLng
   // Dragging the map down (positive mapOffsetY) shifts content down, meaning the
-  // ground point now at screen-center used to sit ABOVE (north) of center.
-  const groundDxMeters = -mapOffsetX * mpp;   // west(-)/east(+) shift of the ground point
-  const groundDyMeters = -mapOffsetY * mpp;   // south(-)/north(+) shift of the ground point in screen-space terms
-
-  const newLng = lng + (groundDxMeters / metersPerDegLng);
-  const newLat = lat + (groundDyMeters / metersPerDegLat);
+  // ground point now at screen-center used to sit ABOVE (north, higher lat) of center.
+  //   -> newLat = lat + (mapOffsetY * mpp) / metersPerDegLat
+  const newLng = lng - (mapOffsetX * mpp) / metersPerDegLng;
+  const newLat = lat + (mapOffsetY * mpp) / metersPerDegLat;
 
   lat = newLat;
   lng = newLng;
