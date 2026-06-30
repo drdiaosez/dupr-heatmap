@@ -327,13 +327,38 @@ function redraw() {
 }
 
 function onZoom(z) {
+  if (lat === null) {
+    zoom = parseInt(z);
+    document.getElementById('zoom-val').textContent = z;
+    return;
+  }
+  // Figure out what ground location is currently under the court (screen center),
+  // accounting for how far the map has been dragged, BEFORE changing zoom.
+  const mpp = metersPerPx(lat, zoom);
+  const metersPerDegLat = 111320;
+  const metersPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
+
+  // Positive mapOffsetX means the map was dragged right, i.e. content moved right,
+  // which means the ground point now at screen-center used to be to the LEFT of
+  // the original center. So we subtract the offset (converted to meters) to find it.
+  // Dragging the map right (positive mapOffsetX) shifts content right, meaning the
+  // ground point now at screen-center used to sit to the LEFT (west) of center.
+  // Dragging the map down (positive mapOffsetY) shifts content down, meaning the
+  // ground point now at screen-center used to sit ABOVE (north) of center.
+  const groundDxMeters = -mapOffsetX * mpp;   // west(-)/east(+) shift of the ground point
+  const groundDyMeters = -mapOffsetY * mpp;   // south(-)/north(+) shift of the ground point in screen-space terms
+
+  const newLng = lng + (groundDxMeters / metersPerDegLng);
+  const newLat = lat + (groundDyMeters / metersPerDegLat);
+
+  lat = newLat;
+  lng = newLng;
+
   zoom = parseInt(z);
   document.getElementById('zoom-val').textContent = z;
-  if (lat !== null) {
-    mapOffsetX = 0;
-    mapOffsetY = 0;
-    renderTiles();
-  }
+  mapOffsetX = 0;
+  mapOffsetY = 0;
+  renderTiles();
 }
 
 // --- Drag to pan ---
